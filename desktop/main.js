@@ -5,6 +5,10 @@ const http = require('http');
 const { fmt, extractDate, parseTaskText } = require('./src/parser');
 
 const PORT = 23119;
+
+// Disable GPU acceleration: required on remote/VM displays where the
+// GPU process crashes on startup ("GPU process isn't usable. Goodbye.")
+app.disableHardwareAcceleration();
 const DATA_DIR = path.join(app.getPath('home'), '.focus-flow');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');

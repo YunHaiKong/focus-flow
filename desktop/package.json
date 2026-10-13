@@ -6,7 +6,7 @@
   "author": "YunHaiKong",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "node start.js",
     "dist": "electron-builder --win portable nsis",
     "check": "node --check main.js && node --check preload.js && node --check src/parser.js"
   },

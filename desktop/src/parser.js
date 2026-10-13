@@ -68,6 +68,9 @@ function parseTaskText(raw) {
     const t = extractTime(text);
     if (t) { time = t.time; text = text.replace(t.matched, ' '); }
     let title = text.replace(/[，,。！!？?\s]+/g, ' ').trim();
+    // strip leftover schedule keywords so titles stay clean
+    title = title.replace(/(?:^|\s)(?:从|于|自)?(?:今天|明天|后天|当天)(?:起|开始)?(?:$|\s)/g, ' ');
+    title = title.replace(/(?:^|\s)(?:从|自)?开始(?:起)?(?:$|\s)/g, ' ').replace(/\s+/g, ' ').trim();
     if (!title || /^(我)?(要|想).{0,8}(干什么|做什么|啥|任务)$/.test(title)) title = '新任务';
 
     const dm = title.match(/(\d+)\s*天/);
