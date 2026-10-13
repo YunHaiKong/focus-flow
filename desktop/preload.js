@@ -4,10 +4,13 @@ contextBridge.exposeInMainWorld('ff', {
   getState: () => ipcRenderer.invoke('get-state'),
   addTask: (text, source) => ipcRenderer.invoke('add-task', { text, source }),
   setStatus: (id, status) => ipcRenderer.invoke('set-status', { id, status }),
+  deleteTask: id => ipcRenderer.invoke('delete-task', { id }),
+  getHistory: filters => ipcRenderer.invoke('get-history', filters || {}),
   focusStart: (minutes, taskId) => ipcRenderer.invoke('focus-start', { minutes, taskId }),
   focusStop: () => ipcRenderer.invoke('focus-stop'),
   saveConfig: cfg => ipcRenderer.invoke('save-config', cfg),
   askAI: message => ipcRenderer.invoke('ask-ai', message),
+  openHistory: () => ipcRenderer.send('open-history'),
 
   expand: () => ipcRenderer.send('expand'),
   shrink: () => ipcRenderer.send('shrink'),

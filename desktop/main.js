@@ -14,11 +14,12 @@ const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const INBOX_FILE = path.join(DATA_DIR, 'inbox.txt');
 
-const BALL = 64;
+const BALL = 80;
 const PANEL_W = 340;
 const PANEL_H = 480;
 
 let win = null;
+let histWin = null;
 let ballAnchor = null;
 let expanded = false;
 let focus = { running: false, endsAt: null, minutes: 25, taskId: null, timer: null };
@@ -45,13 +46,13 @@ const save = (f, d) => fs.writeFileSync(f, JSON.stringify(d, null, 2));
 
 function defaultAnchor() {
   const { workArea } = screen.getPrimaryDisplay();
-  return { x: workArea.x + workArea.width - BALL - 40, y: workArea.y + workArea.height - BALL - 80 };
+  return { x: workArea.x + workArea.width - BALL - 16, y: workArea.y + workArea.height - BALL - 16 };
 }
 
 function clampPos(x, y) {
   const { workArea } = screen.getPrimaryDisplay();
-  x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - BALL));
-  y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - BALL));
+  x = Math.max(workArea.x + 8, Math.min(x, workArea.x + workArea.width - BALL - 8));
+  y = Math.max(workArea.y + 8, Math.min(y, workArea.y + workArea.height - BALL - 8));
   return { x, y };
 }
 
@@ -101,6 +102,28 @@ function setStatus(id, status) {
   if (t) { t.status = status; save(TASKS_FILE, data); }
   refreshRenderer();
   return { ok: true };
+}
+
+function deleteTask(id) {
+  const data = load(TASKS_FILE);
+  const before = data.tasks.length;
+  data.tasks = data.tasks.filter(x => x.id !== id);
+  save(TASKS_FILE, data);
+  refreshRenderer();
+  return { ok: true, deleted: before - data.tasks.length };
+}
+
+function getHistory(filters = {}) {
+  const data = load(TASKS_FILE);
+  let tasks = data.tasks.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (filters.status) tasks = tasks.filter(t => t.status === filters.status);
+  if (filters.start) tasks = tasks.filter(t => t.date >= filters.start);
+  if (filters.end) tasks = tasks.filter(t => t.date <= filters.end);
+  if (filters.q) {
+    const q = String(filters.q).toLowerCase();
+    tasks = tasks.filter(t => t.title.toLowerCase().includes(q));
+  }
+  return { tasks };
 }
 
 function focusStart(minutes, taskId) {
@@ -179,6 +202,24 @@ function createBallWindow() {
   win.on('closed', () => { win = null; });
 }
 
+function createHistoryWindow() {
+  if (histWin && !histWin.isDestroyed()) { histWin.show(); return; }
+  histWin = new BrowserWindow({
+    width: 900,
+    height: 620,
+    minWidth: 720,
+    minHeight: 420,
+    title: 'Focus Flow 历史',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  histWin.loadFile(path.join(__dirname, 'src', 'history.html'));
+  histWin.on('closed', () => { histWin = null; });
+}
+
 function startServer() {
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://127.0.0.1');
@@ -199,6 +240,13 @@ function startServer() {
         const data = load(TASKS_FILE);
         return send(200, { date, tasks: data.tasks.filter(t => t.date === date) });
       }
+      if (u.pathname === '/api/history') {
+        const status = u.searchParams.get('status') || '';
+        const start = u.searchParams.get('start') || '';
+        const end = u.searchParams.get('end') || '';
+        const q = u.searchParams.get('q') || '';
+        return send(200, getHistory({ status, start, end, q }));
+      }
       return send(404, { error: 'not found' });
     }
 
@@ -215,6 +263,10 @@ function startServer() {
         if (u.pathname === '/api/complete') {
           if (!json.id) return send(400, { error: 'id required' });
           return send(200, setStatus(json.id, 'done'));
+        }
+        if (u.pathname === '/api/delete') {
+          if (!json.id) return send(400, { error: 'id required' });
+          return send(200, deleteTask(json.id));
         }
         if (u.pathname === '/api/focus/start') return send(200, focusStart(json.minutes, json.taskId));
         if (u.pathname === '/api/focus/stop') return send(200, focusStop(false));
@@ -321,6 +373,8 @@ ipcMain.handle('get-state', () => {
 
 ipcMain.handle('add-task', (e, p) => addTask(p.text, p.source || 'manual'));
 ipcMain.handle('set-status', (e, p) => setStatus(p.id, p.status));
+ipcMain.handle('delete-task', (e, p) => deleteTask(p.id));
+ipcMain.handle('get-history', (e, p) => getHistory(p || {}));
 ipcMain.handle('focus-start', (e, p) => focusStart(p.minutes, p.taskId));
 ipcMain.handle('focus-stop', () => focusStop(false));
 ipcMain.handle('ask-ai', (e, message) => askAI(message));
@@ -354,11 +408,14 @@ ipcMain.on('drag-end', () => { dragBase = null; persistAnchor(); });
 ipcMain.on('show-menu', () => {
   Menu.popup(Menu.buildFromTemplate([
     { label: expanded ? '收起面板' : '展开面板', click: () => setExpanded(!expanded) },
+    { label: '历史记录', click: () => createHistoryWindow() },
     { label: '打开数据目录', click: () => shell.openPath(DATA_DIR) },
     { type: 'separator' },
     { label: '退出 Focus Flow', click: () => app.quit() }
   ]));
 });
+
+ipcMain.on('open-history', () => createHistoryWindow());
 
 app.whenReady().then(() => {
   ensureFiles();
