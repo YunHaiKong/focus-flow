@@ -406,13 +406,14 @@ ipcMain.on('drag-move', (e, dx, dy) => {
 ipcMain.on('drag-end', () => { dragBase = null; persistAnchor(); });
 
 ipcMain.on('show-menu', () => {
-  Menu.popup(Menu.buildFromTemplate([
+  const menu = Menu.buildFromTemplate([
     { label: expanded ? '收起面板' : '展开面板', click: () => setExpanded(!expanded) },
     { label: '历史记录', click: () => createHistoryWindow() },
     { label: '打开数据目录', click: () => shell.openPath(DATA_DIR) },
     { type: 'separator' },
     { label: '退出 Focus Flow', click: () => app.quit() }
-  ]));
+  ]);
+  menu.popup({ window: win });
 });
 
 ipcMain.on('open-history', () => createHistoryWindow());
