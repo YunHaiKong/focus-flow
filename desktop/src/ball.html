@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Focus Flow</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+
+#ball {
+  position: absolute; right: 0; bottom: 0; width: 64px; height: 64px; border-radius: 50%;
+  background: #4f46e5; color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 600; cursor: grab; box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+  transition: background 0.2s, transform 0.15s;
+}
+#ball:hover { transform: scale(1.06); }
+#ball.focusing { background: #ef4444; font-size: 15px; }
+
+body.expanded #ball { width: 46px; height: 46px; font-size: 14px; z-index: 10; box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4); }
+
+#panel {
+  position: absolute; inset: 0; background: #ffffff; border-radius: 14px;
+  border: 1px solid #e5e7eb; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+  display: none; flex-direction: column; overflow: hidden; padding-bottom: 52px;
+}
+body.expanded #panel { display: flex; }
+
+.tabs { display: flex; border-bottom: 1px solid #e5e7eb; background: #f9fafb; border-radius: 14px 14px 0 0; }
+.tabs button {
+  flex: 1; padding: 9px 0 8px; border: none; background: none; font-size: 12px;
+  color: #6b7280; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tabs button.active { color: #4f46e5; background: #fff; font-weight: 600; border-bottom-color: #4f46e5; }
+
+section.tab { display: none; flex: 1; overflow-y: auto; padding: 12px 14px; }
+section.tab.active { display: block; }
+
+.sec-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+
+.todo-item {
+  display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; background: #f9fafb;
+  border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #4f46e5;
+}
+.todo-item.done { border-left-color: #10b981; opacity: 0.6; }
+.todo-item input[type="checkbox"] { margin-top: 3px; width: 15px; height: 15px; cursor: pointer; }
+.todo-main { flex: 1; min-width: 0; }
+.todo-title { font-size: 13px; color: #1f2937; word-break: break-all; }
+.todo-item.done .todo-title { text-decoration: line-through; }
+.todo-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+.src-tag { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #eef2ff; color: #6366f1; }
+
+.add-row { display: flex; gap: 8px; margin-top: 4px; }
+.add-row input {
+  flex: 1; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px; outline: none;
+}
+.add-row input:focus { border-color: #4f46e5; }
+.add-row button {
+  padding: 8px 14px; background: #4f46e5; color: #fff; border: none; border-radius: 8px;
+  font-size: 12px; cursor: pointer;
+}
+
+.big-timer { font-size: 52px; font-weight: 700; text-align: center; color: #4f46e5; margin: 24px 0 6px; font-variant-numeric: tabular-nums; }
+.big-timer.running { color: #ef4444; }
+.focus-task-row { margin: 8px 0; }
+.focus-task-row select { width: 100%; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px; background: #fff; }
+.mode-row { display: flex; justify-content: center; gap: 8px; margin: 10px 0; }
+.mode-row button { padding: 6px 14px; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 16px; font-size: 12px; cursor: pointer; }
+.mode-row button.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.ctrl-row { display: flex; justify-content: center; gap: 10px; margin: 12px 0; }
+.ctrl-row button { padding: 9px 22px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ctrl-row .primary { background: #4f46e5; color: #fff; }
+.ctrl-row .primary.running { background: #ef4444; }
+.ctrl-row .secondary { background: #f3f4f6; color: #374151; }
+.stat-row { text-align: center; font-size: 12px; color: #6b7280; }
+
+#ai-log { display: flex; flex-direction: column; gap: 8px; min-height: 200px; margin-bottom: 10px; }
+.msg { max-width: 88%; padding: 8px 10px; border-radius: 10px; font-size: 12px; line-height: 1.5; word-break: break-all; }
+.msg.user { align-self: flex-end; background: #4f46e5; color: #fff; border-bottom-right-radius: 2px; }
+.msg.bot { align-self: flex-start; background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 2px; }
+.msg.err { background: #fee2e2; color: #991b1b; }
+
+#tab-settings label { display: block; font-size: 12px; color: #374151; margin-bottom: 10px; }
+#tab-settings input[type="text"], #tab-settings input[type="password"] {
+  display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px;
+}
+#tab-settings .check { display: flex; align-items: center; gap: 6px; }
+#tab-settings .check input { width: 15px; height: 15px; }
+#cfg-save { display: block; width: 100%; padding: 9px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; margin-bottom: 12px; }
+.hint { font-size: 11px; color: #9ca3af; line-height: 1.7; }
+
+.empty { text-align: center; color: #9ca3af; font-size: 12px; padding: 24px 0; }
+</style>
+</head>
+<body class="shrunk">
+<div id="ball"><span id="ball-text">–</span></div>
+
+<div id="panel">
+  <div class="tabs">
+    <button data-tab="todo" class="active">待办</button>
+    <button data-tab="focus">专注</button>
+    <button data-tab="ai">AI</button>
+    <button data-tab="settings">设置</button>
+  </div>
+
+  <section class="tab active" id="tab-todo">
+    <div class="sec-title" id="todo-date">今日待办</div>
+    <div id="todo-list"><div class="empty">暂无任务</div></div>
+    <div class="add-row">
+      <input id="add-input" placeholder="输入任务回车，支持「后天 / 10.16 / 明天3点」">
+      <button id="add-btn">＋</button>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-focus">
+    <div class="big-timer" id="focus-time">25:00</div>
+    <div class="focus-task-row">
+      <select id="focus-task"><option value="">专注不关联任务</option></select>
+    </div>
+    <div class="mode-row">
+      <button class="mode active" data-m="25">25 分</button>
+      <button class="mode" data-m="15">15 分</button>
+      <button class="mode" data-m="5">5 分</button>
+    </div>
+    <div class="ctrl-row">
+      <button id="focus-toggle" class="primary">开始专注</button>
+      <button id="focus-reset" class="secondary">重置</button>
+    </div>
+    <div class="stat-row" id="focus-stat">今日专注 0 分钟</div>
+  </section>
+
+  <section class="tab" id="tab-ai">
+    <div id="ai-log"><div class="msg bot">把你的计划告诉我，例如「后天下午3点交报告，周五买礼物」，我会自动提取并添加任务。</div></div>
+    <div class="add-row">
+      <input id="ai-input" placeholder="对 AI 说出你的计划">
+      <button id="ai-btn">发送</button>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-settings">
+    <label>API Base URL<input type="text" id="cfg-base" placeholder="https://api.openai.com/v1"></label>
+    <label>API Key<input type="password" id="cfg-key" placeholder="sk-..."></label>
+    <label>模型<input type="text" id="cfg-model" placeholder="gpt-4o-mini"></label>
+    <label class="check"><input type="checkbox" id="cfg-autostart"> 开机自动启动</label>
+    <button id="cfg-save">保存设置</button>
+    <div class="hint">
+      写入通道：<br>
+      1. HTTP 接口：127.0.0.1:23119（WorkBuddy 等可直连）<br>
+      2. inbox 文件：~/.focus-flow/inbox.txt<br>
+      3. 剪贴板：复制以 #task 开头的文本自动添加<br>
+      右键悬浮球可打开菜单 / 拖动悬浮球改变位置
+    </div>
+  </section>
+</div>
+
+<script>
+const api = window.ff;
+let state = { tasks: [], allTasks: [], config: {}, focus: { running: false, remaining: 0 }, focusToday: 0 };
+let ui = { expanded: false };
+let selMinutes = 25;
+let lastShrink = 0;
+let hoverTimer = null;
+let shrinkTimer = null;
+
+const $ = id => document.getElementById(id);
+const ball = $('ball');
+const ballText = $('ball-text');
+
+function mmss(s) {
+  s = Math.max(0, s);
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+function displayDate(d) {
+  const p = d.split('-');
+  return parseInt(p[1], 10) + '月' + parseInt(p[2], 10) + '日';
+}
+
+async function loadState() {
+  state = await api.getState();
+  render();
+}
+
+function renderBall() {
+  if (state.focus.running) {
+    ball.classList.add('focusing');
+    ballText.textContent = mmss(state.focus.remaining);
+  } else {
+    ball.classList.remove('focusing');
+    const n = state.tasks.filter(t => t.status !== 'done').length;
+    ballText.textContent = n > 0 ? String(n) : '✓';
+  }
+}
+
+function renderTodo() {
+  $('todo-date').textContent = '今日待办 · ' + displayDate(state.date || '');
+  const list = $('todo-list');
+  if (!state.tasks.length) {
+    list.innerHTML = '<div class="empty">今天没有任务，输入框添加或让 AI 帮你填</div>';
+    return;
+  }
+  list.innerHTML = state.tasks.map(t => `
+    <div class="todo-item ${t.status === 'done' ? 'done' : ''}">
+      <input type="checkbox" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>
+      <div class="todo-main">
+        <div class="todo-title">${t.title}</div>
+        <div class="todo-meta">${t.time ? t.time + ' · ' : ''}${t.focusMinutes ? '已专注' + t.focusMinutes + '分钟 · ' : ''}<span class="src-tag">${t.source}</span></div>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => api.setStatus(cb.dataset.id, cb.checked ? 'done' : 'todo').then(loadState));
+  });
+}
+
+function renderFocus() {
+  const ft = $('focus-time');
+  const toggle = $('focus-toggle');
+  if (state.focus.running) {
+    ft.textContent = mmss(state.focus.remaining);
+    ft.classList.add('running');
+    toggle.textContent = '暂停专注';
+    toggle.classList.add('running');
+  } else {
+    ft.textContent = mmss(selMinutes * 60);
+    ft.classList.remove('running');
+    toggle.textContent = '开始专注';
+    toggle.classList.remove('running');
+  }
+  const sel = $('focus-task');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">专注不关联任务</option>' +
+    state.allTasks.map(t => `<option value="${t.id}" ${t.id === cur || t.id === state.focus.taskId ? 'selected' : ''}>${t.title}（${displayDate(t.date)}）</option>`).join('');
+  $('focus-stat').textContent = `今日专注 ${state.focusToday || 0} 分钟`;
+}
+
+function render() {
+  renderBall();
+  renderTodo();
+  renderFocus();
+}
+
+function renderSettings() {
+  const c = state.config || {};
+  if (document.activeElement !== $('cfg-base')) $('cfg-base').value = c.baseUrl || '';
+  if (document.activeElement !== $('cfg-key')) $('cfg-key').value = c.apiKey || '';
+  if (document.activeElement !== $('cfg-model')) $('cfg-model').value = c.model || '';
+  $('cfg-autostart').checked = !!c.autoStart;
+}
+
+document.querySelectorAll('.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('section.tab').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'settings') renderSettings();
+  });
+});
+
+$('add-btn').addEventListener('click', doAdd);
+$('add-input').addEventListener('keypress', e => { if (e.key === 'Enter') doAdd(); });
+async function doAdd() {
+  const v = $('add-input').value.trim();
+  if (!v) return;
+  await api.addTask(v, 'manual');
+  $('add-input').value = '';
+  loadState();
+}
+
+document.querySelectorAll('.mode-row button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.mode-row button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    selMinutes = parseInt(b.dataset.m, 10);
+    renderFocus();
+  });
+});
+
+$('focus-toggle').addEventListener('click', () => {
+  if (state.focus.running) api.focusStop();
+  else api.focusStart(selMinutes, $('focus-task').value);
+});
+$('focus-reset').addEventListener('click', () => { if (state.focus.running) api.focusStop(); });
+
+$('ai-btn').addEventListener('click', doAI);
+$('ai-input').addEventListener('keypress', e => { if (e.key === 'Enter') doAI(); });
+async function doAI() {
+  const v = $('ai-input').value.trim();
+  if (!v) return;
+  $('ai-input').value = '';
+  appendMsg('user', v);
+  const r = await api.askAI(v);
+  if (r.ok) appendMsg('bot', r.reply);
+  else appendMsg('bot', r.error, true);
+  loadState();
+}
+function appendMsg(role, text, isErr) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role + (isErr ? ' err' : '');
+  div.textContent = text;
+  $('ai-log').appendChild(div);
+  $('ai-log').scrollTop = $('ai-log').scrollHeight;
+}
+
+$('cfg-save').addEventListener('click', async () => {
+  await api.saveConfig({
+    baseUrl: $('cfg-base').value.trim(),
+    apiKey: $('cfg-key').value.trim(),
+    model: $('cfg-model').value.trim(),
+    autoStart: $('cfg-autostart').checked
+  });
+  $('cfg-save').textContent = '已保存 ✓';
+  setTimeout(() => { $('cfg-save').textContent = '保存设置'; }, 1200);
+  loadState();
+});
+
+let drag = null;
+let moved = false;
+ball.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  moved = false;
+  drag = { x: e.screenX, y: e.screenY };
+  api.dragStart();
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const dx = e.screenX - drag.x;
+  const dy = e.screenY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+  api.dragMove(dx, dy);
+});
+window.addEventListener('mouseup', () => {
+  if (drag) { drag = null; api.dragEnd(); }
+});
+ball.addEventListener('click', () => { if (!moved) api.clickBall(); });
+ball.addEventListener('dblclick', () => {
+  if (moved) return;
+  if (state.focus.running) api.focusStop();
+  else api.focusStart(selMinutes, $('focus-task').value);
+});
+ball.addEventListener('contextmenu', e => { e.preventDefault(); api.showMenu(); });
+
+ball.addEventListener('mouseenter', () => {
+  if (ui.expanded) return;
+  if (Date.now() - lastShrink < 700) return;
+  clearTimeout(shrinkTimer);
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => api.expand(), 800);
+});
+ball.addEventListener('mouseleave', () => clearTimeout(hoverTimer));
+document.addEventListener('mouseleave', () => {
+  clearTimeout(shrinkTimer);
+  shrinkTimer = setTimeout(() => { if (ui.expanded) api.shrink(); }, 350);
+});
+document.addEventListener('mouseenter', () => clearTimeout(shrinkTimer));
+
+api.onUI(s => {
+  ui = s;
+  document.body.className = s.expanded ? 'expanded' : 'shrunk';
+  if (!s.expanded) lastShrink = Date.now();
+});
+api.onRefresh(() => loadState());
+api.onTick(t => {
+  state.focus.running = t.running;
+  state.focus.remaining = t.remaining;
+  renderBall();
+  renderFocus();
+});
+
+loadState();
+</script>
+</body>
+</html>

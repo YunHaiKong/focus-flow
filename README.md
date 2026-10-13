@@ -1,84 +1,91 @@
 # Focus Flow
 
-AI 任务看板 + 悬浮球快捷入口 + 番茄专注计时器。
+**AI 任务中枢 + 桌面悬浮球 + 番茄专注计时器。**
 
-上传一张任务表格图片，或者输入「后天/10.16 我要干什么」，自动拆分任务、生成每日看板，并支持一键开始专注。
+跟任意 AI 对话（WorkBuddy、网页版 ChatGPT、任何有终端或剪贴板权限的 Agent），它就能把任务自动填进你的悬浮球。鼠标往球上一停，今日待办和番茄钟直接显示。
 
-🔗 **在线体验**：https://yunhaikong.github.io/focus-flow
+> 本仓库包含两部分：
+> - `desktop/` —— **Electron 桌面版**（主力形态，悬浮球常驻桌面）
+> - `web/` —— 浏览器版（轻量体验，GitHub Pages 在线可用）
 
-## 功能
+## 桌面版（desktop/）
+
+### 核心能力
 
 | 模块 | 说明 |
 |---|---|
-| 📷 图片识别 | 使用 Tesseract.js 在浏览器端 OCR 识别任务表格，自动提取任务、天数、截止日期 |
-| 💬 自然语言查询 | 支持「今天」「明天」「后天」「10.16」「本周计划」等查询 |
-| 📋 任务看板 | 待办 / 进行中 / 已完成三列看板，支持拖拽切换状态 |
-| 📅 日视图 | 点击日历条或输入日期，查看当天具体任务 |
-| 🎱 悬浮球 | 右下角常驻，一键开始专注 / 今日任务 / 添加任务 |
-| 🍅 专注计时 | 番茄钟（25/15/5 分钟），专注结束自动计入对应任务 |
+| 🎱 悬浮球 | 无边框、置顶、可拖动、位置记忆。空闲时显示今日待办数，专注中直接在球面显示倒计时 |
+| 🖱️ 双模式展开 | 悬停 0.8 秒自动弹出面板；点击立即展开；移开自动收起；双击球直接开始/暂停专注 |
+| 📋 待办 | 今日任务列表、勾选完成、手动添加（支持「后天 / 10.16 / 明天3点 / 周三」） |
+| 🍅 番茄专注 | 25/15/5 分钟三档，可关联任务，专注分钟数自动累计 |
+| 🤖 内置 AI | 面板里的对话框，说出你的计划自动提取任务（需配置 OpenAI 兼容 API Key） |
+| 🔔 系统通知 | 任务添加、专注结束桌面通知；开机自启可选 |
 
-## 快速开始
+### 任意 AI 写入（四通道）
 
-无需构建，直接用浏览器打开 `index.html` 即可。
+这是「不管哪个 AI 都能填」的关键。软件常驻后提供四条写入路径：
+
+| 通道 | 用法 | 适合谁 |
+|---|---|---|
+| **本地 HTTP API** | `POST http://127.0.0.1:23119/api/tasks` | WorkBuddy / 任何能跑命令的 Agent |
+| **inbox 文件** | 往 `~/.focus-flow/inbox.txt` 写一行任务文本 | 任何能写文件的 AI 或脚本 |
+| **剪贴板标记** | 复制以 `#task` 开头的文本，2 秒内自动入库 | 网页版 ChatGPT 等纯对话 AI |
+| **内置 AI 对话** | 悬浮球面板「AI」标签页 | 你自己 |
+
+### HTTP API 一览
 
 ```bash
-git clone https://github.com/YunHaiKong/focus-flow.git
-cd focus-flow
-# 用任意静态服务器打开，例如：
-python -m http.server 8080
+# 健康检查
+curl http://127.0.0.1:23119/health
+
+# 添加任务（自然语言，自动解析日期）
+curl -X POST http://127.0.0.1:23119/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"text":"后天下午3点交报告"}'
+
+# 查询某天任务（回答「后天/10.16我要干什么」）
+curl "http://127.0.0.1:23119/api/today?date=10.16"
+
+# 完成任务
+curl -X POST http://127.0.0.1:23119/api/complete \
+  -H "Content-Type: application/json" \
+  -d '{"id":"t1697..."}'
+
+# 开始 / 停止专注
+curl -X POST http://127.0.0.1:23119/api/focus/start -d '{"minutes":25}'
+curl -X POST http://127.0.0.1:23119/api/focus/stop
 ```
 
-然后访问 `http://localhost:8080`。
+### 运行
 
-## 使用示例
-
-### 1. 图片识别
-
-1. 点击「📷 图片识别」区域
-2. 上传你的任务表格图片
-3. 系统自动拆分任务到每一天
-
-### 2. 自然语言查询
-
-在「💬 自然语言」输入框中输入：
-
-```
-后天我要干什么
-10.16我要干什么
-本周计划
+```bash
+cd desktop
+npm install
+npm start          # 开发运行
+npm run dist       # 打包 Windows portable / 安装包（输出在 release/）
 ```
 
-### 3. 专注计时
+依赖：Node.js 18+，Windows 10+（macOS/Linux 理论可用，未测）。
 
-1. 点击右下角悬浮球 → 开始专注
-2. 或点击日视图中任意任务的「专注」按钮
-3. 番茄钟结束后，专注时长自动计入该任务
+### 数据与隐私
 
-## 技术栈
+所有数据存在本地 `~/.focus-flow/`（tasks.json / config.json / inbox.txt），不联网、不上传。内置 AI 对话需要你自己填 API Key，请求直连你配置的服务商。
 
-- 原生 HTML / CSS / JavaScript
-- [Tesseract.js](https://github.com/naptha/tesseract.js) 浏览器端 OCR
-- LocalStorage 本地数据持久化
-- GitHub Pages 部署
+## 浏览器版（web/）
 
-## 项目结构
+零依赖单文件应用：图片 OCR（Tesseract.js）、自然语言查询、看板、页内番茄钟。
 
-```
-focus-flow/
-├── index.html      # 完整单页应用
-├── README.md       # 项目说明
-└── .github/
-    └── workflows/
-        └── pages.yml   # GitHub Pages 自动部署
-```
+🔗 在线体验：https://yunhaikong.github.io/focus-flow/
 
-## 数据说明
+## WorkBuddy 联动
 
-所有数据存储在浏览器 LocalStorage 中，不会上传到服务器。清除浏览器数据会丢失任务记录。
+安装 `focus-flow-bridge` skill 后，在 WorkBuddy 对话里直接说：
 
-## 贡献
+> 「把后天下午交报告加到悬浮球」
+> 「10.16 我要干什么？」
+> 「开始专注 25 分钟」
 
-欢迎 Issue 和 PR。
+WorkBuddy 会自动调用本地 HTTP API 完成操作。
 
 ## License
 

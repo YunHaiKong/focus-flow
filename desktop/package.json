@@ -1,0 +1,29 @@
+{
+  "name": "focus-flow",
+  "version": "1.0.0",
+  "description": "AI task hub with floating ball, pomodoro timer, and multi-channel AI input",
+  "main": "main.js",
+  "author": "YunHaiKong",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable nsis",
+    "check": "node --check main.js && node --check preload.js && node --check src/parser.js"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "cn.yunhaikong.focusflow",
+    "productName": "Focus Flow",
+    "directories": { "output": "release" },
+    "win": {
+      "target": ["portable", "nsis"]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  }
+}
