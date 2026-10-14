@@ -9,13 +9,19 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 
 #ball {
   position: absolute; right: 0; bottom: 0; width: 80px; height: 80px; border-radius: 50%;
-  background: transparent; color: #fff; display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 0 0 1.5px rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  color: #fff; display: flex; align-items: center; justify-content: center;
   cursor: grab; user-select: none;
-  transition: transform 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s;
   -webkit-app-region: no-drag;
 }
-#ball:hover { transform: scale(1.08); }
-#ball:active { cursor: grabbing; }
+#ball:hover {
+  transform: scale(1.06);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.35), 0 3px 8px rgba(0, 0, 0, 0.15), inset 0 0 0 1.5px #fff;
+}
+#ball:active { cursor: grabbing; transform: scale(0.97); }
 
 #sprite { width: 70%; height: 70%; object-fit: contain; pointer-events: none; z-index: 2; }
 
@@ -100,12 +106,20 @@ input, select, textarea, .todo-title, .edit-title-input {
   -webkit-app-region: no-drag !important;
 }
 
-.tabs { display: flex; border-bottom: 1px solid #e5e7eb; background: #f9fafb; border-radius: 14px 14px 0 0; }
+.tabs { display: flex; align-items: center; border-bottom: 1px solid #e5e7eb; background: #f9fafb; border-radius: 14px 14px 0 0; }
 .tabs button {
   flex: 1; padding: 9px 0 8px; border: none; background: none; font-size: 12px;
   color: #6b7280; cursor: pointer; border-bottom: 2px solid transparent;
 }
 .tabs button.active { color: #4f46e5; background: #fff; font-weight: 600; border-bottom-color: #4f46e5; }
+.tabs .collapse-btn {
+  flex: 0 0 34px !important; height: 100%; border: none !important; background: transparent;
+  color: #9ca3af; font-size: 13px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 2px solid transparent !important;
+  transition: color 0.15s, background 0.15s;
+}
+.tabs .collapse-btn:hover { color: #ef4444 !important; background: rgba(239, 68, 68, 0.08); }
 
 section.tab { display: none; flex: 1; overflow-y: auto; padding: 12px 14px; }
 section.tab.active { display: block; }
@@ -227,6 +241,7 @@ section.tab.active { display: block; }
     <button data-tab="focus">专注</button>
     <button data-tab="ai">AI</button>
     <button data-tab="settings">设置</button>
+    <button id="btn-collapse" class="collapse-btn" title="收起面板 (Esc)">✕</button>
   </div>
 
   <section class="tab active" id="tab-todo">
@@ -706,15 +721,16 @@ function renderSettings() {
   updateSyncBadge(state.syncStatus || 'disconnected');
 }
 
-document.querySelectorAll('.tabs button').forEach(btn => {
+document.querySelectorAll('.tabs button[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tabs button[data-tab]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('section.tab').forEach(s => s.classList.remove('active'));
     btn.classList.add('active');
     $('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'settings') renderSettings();
   });
 });
+$('btn-collapse').addEventListener('click', () => api.shrink());
 
 $('add-btn').addEventListener('click', doAdd);
 $('add-input').addEventListener('keypress', e => { if (e.key === 'Enter') doAdd(); });
@@ -835,7 +851,7 @@ window.addEventListener('mousemove', e => {
   if (!drag) return;
   const dx = e.screenX - drag.x;
   const dy = e.screenY - drag.y;
-  if (Math.abs(dx) + Math.abs(dy) > 4) {
+  if (Math.abs(dx) + Math.abs(dy) > 12) {
     moved = true;
     setSprite('drag');
   }
@@ -848,7 +864,7 @@ window.addEventListener('mouseup', () => {
     setSprite('idle');
   }
 });
-ball.addEventListener('click', () => {
+ball.addEventListener('click', (e) => {
   if (moved) return;
   clickCount++;
   clearTimeout(clickResetTimer);
@@ -871,11 +887,6 @@ ball.addEventListener('contextmenu', e => { e.preventDefault(); api.showMenu(); 
 
 ball.addEventListener('mouseenter', () => {
   setSprite('hover');
-  if (ui.expanded) return;
-  if (Date.now() - lastShrink < 700) return;
-  clearTimeout(shrinkTimer);
-  clearTimeout(hoverTimer);
-  hoverTimer = setTimeout(() => api.expand(), 800);
 });
 ball.addEventListener('mouseleave', () => {
   if (!ui.expanded) {
@@ -883,15 +894,7 @@ ball.addEventListener('mouseleave', () => {
     setSprite('idle');
     renderBall();
   }
-  clearTimeout(hoverTimer);
 });
-document.addEventListener('mouseleave', () => {
-  clearTimeout(shrinkTimer);
-  shrinkTimer = setTimeout(() => {
-    if (ui.expanded) api.shrink();
-  }, 600);
-});
-document.addEventListener('mouseenter', () => clearTimeout(shrinkTimer));
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && ui.expanded) {

@@ -17,13 +17,25 @@
   "build": {
     "appId": "cn.yunhaikong.focusflow",
     "productName": "Focus Flow",
-    "directories": { "output": "release" },
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "assets/*"
+    ],
     "win": {
-      "target": ["portable", "nsis"]
+      "icon": "assets/focus-rounded.ico",
+      "target": [
+        "portable",
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false
     }
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

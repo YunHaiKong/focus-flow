@@ -598,8 +598,10 @@ function setExpanded(on) {
     const x = Math.max(workArea.x, Math.min(ballAnchor.x + BALL - PANEL_W, workArea.x + workArea.width - PANEL_W));
     const y = Math.max(workArea.y, Math.min(ballAnchor.y + BALL - PANEL_H, workArea.y + workArea.height - PANEL_H));
     win.setBounds({ x, y, width: PANEL_W, height: PANEL_H });
+    try { win.setSkipTaskbar(false); } catch (e) {}
   } else {
     win.setBounds({ x: ballAnchor.x, y: ballAnchor.y, width: BALL, height: BALL });
+    try { win.setSkipTaskbar(true); } catch (e) {}
     checkEdgeDock();
   }
   win.webContents.send('ui-state', { expanded, dockEdge });
@@ -667,14 +669,21 @@ function createHistoryWindow() {
 function createTray() {
   if (tray) return;
   try {
+    const icoPath = path.join(__dirname, 'assets', 'focus-rounded.ico');
     const trayIconPath = path.join(__dirname, 'assets', 'tray.png');
     const mainIconPath = path.join(__dirname, 'assets', 'icon.png');
     let img;
-    if (fs.existsSync(trayIconPath)) {
-      img = nativeImage.createFromPath(trayIconPath);
+    const unpackedIco = icoPath.replace('app.asar', 'app.asar.unpacked');
+    if (fs.existsSync(unpackedIco)) {
+      img = nativeImage.createFromPath(unpackedIco);
+    } else if (fs.existsSync(icoPath)) {
+      img = nativeImage.createFromBuffer(fs.readFileSync(icoPath));
+    } else if (fs.existsSync(trayIconPath)) {
+      img = nativeImage.createFromBuffer(fs.readFileSync(trayIconPath));
     } else if (fs.existsSync(mainIconPath)) {
-      img = nativeImage.createFromPath(mainIconPath);
-    } else {
+      img = nativeImage.createFromBuffer(fs.readFileSync(mainIconPath));
+    }
+    if (!img || img.isEmpty()) {
       const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZElEQVQ4T2NkoBAwUqifYdQAkG1gYGBgeP7y1X90zfcPn/6jG3Du4hUMw6kF0DWiaUam0cMAug1o6Xq4+j9//mHExcbwD00zshlE9yVOGWIA3T6k0A1o3h01AB+D0QwA+c5Pcg4G3QAAAABJRU5ErkJggg==';
       img = nativeImage.createFromDataURL(iconBase64);
     }
