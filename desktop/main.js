@@ -7,8 +7,7 @@ const SyncClient = require('./src/sync-client');
 
 const PORT = 23119;
 
-// Disable GPU acceleration for virtual display compatibility
-app.disableHardwareAcceleration();
+// Enable normal GPU acceleration for proper DWM transparent window compositing
 
 const DATA_DIR = path.join(app.getPath('home'), '.focus-flow');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
@@ -599,6 +598,8 @@ function setExpanded(on) {
     const y = Math.max(workArea.y, Math.min(ballAnchor.y + BALL - PANEL_H, workArea.y + workArea.height - PANEL_H));
     win.setBounds({ x, y, width: PANEL_W, height: PANEL_H });
     try { win.setSkipTaskbar(false); } catch (e) {}
+    win.show();
+    win.focus();
   } else {
     win.setBounds({ x: ballAnchor.x, y: ballAnchor.y, width: BALL, height: BALL });
     try { win.setSkipTaskbar(true); } catch (e) {}
@@ -609,21 +610,27 @@ function setExpanded(on) {
 
 function createBallWindow() {
   const cfg = load(CONFIG_FILE, {});
-  ballAnchor = clampPos((cfg.ballPos && cfg.ballPos.x !== undefined) ? cfg.ballPos.x : defaultAnchor().x,
-                        (cfg.ballPos && cfg.ballPos.y !== undefined) ? cfg.ballPos.y : defaultAnchor().y);
+  const primaryDisp = screen.getPrimaryDisplay();
+  const { workArea } = primaryDisp;
+
+  const centerX = Math.round(workArea.x + (workArea.width - PANEL_W) / 2);
+  const centerY = Math.round(workArea.y + (workArea.height - PANEL_H) / 2);
+
+  ballAnchor = clampPos((cfg.ballPos && cfg.ballPos.x !== undefined) ? cfg.ballPos.x : (workArea.x + workArea.width - BALL - 40),
+                        (cfg.ballPos && cfg.ballPos.y !== undefined) ? cfg.ballPos.y : Math.round(workArea.y + workArea.height / 2));
 
   const iconPath = path.join(__dirname, 'assets', 'icon.png');
   win = new BrowserWindow({
-    width: BALL,
-    height: BALL,
-    x: ballAnchor.x,
-    y: ballAnchor.y,
+    width: PANEL_W,
+    height: PANEL_H,
+    x: centerX,
+    y: centerY,
     frame: false,
     transparent: true,
     resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
+    skipTaskbar: false,
+    hasShadow: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -631,15 +638,22 @@ function createBallWindow() {
       nodeIntegration: false
     }
   });
-  win.setAlwaysOnTop(true);
+  win.setAlwaysOnTop(true, 'screen-saver');
+  try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (e) {}
   win.loadFile(path.join(__dirname, 'src', 'ball.html'));
   win.on('closed', () => { win = null; });
+  expanded = true;
+
   win.webContents.once('did-finish-load', () => {
-    setExpanded(true);
+    if (win && !win.isDestroyed()) {
+      win.show();
+      win.focus();
+      win.webContents.send('ui-state', { expanded: true, dockEdge: null });
+    }
     try {
       new Notification({
-        title: 'Focus Flow 桌面悬浮球已就绪',
-        body: '面板已展开！点击空白处自动收起，悬浮球停靠在屏幕右下角。快捷键 Alt+Shift+F 随时呼出。',
+        title: 'Focus Flow 桌面伴侣已就绪',
+        body: '面板已在桌面居中呈现！点击右上角「✕ 收起」即可切换为桌面悬浮球。',
         icon: fs.existsSync(iconPath) ? iconPath : undefined
       }).show();
     } catch (e) {}
@@ -908,7 +922,8 @@ ipcMain.handle('get-state', () => {
     focusToday: (data.focusHistory || []).filter(h => h.date === today).reduce((s, h) => s + h.minutes, 0),
     config: load(CONFIG_FILE, {}),
     syncStatus: syncClient ? syncClient.status : 'disconnected',
-    dockEdge
+    dockEdge,
+    expanded
   };
 });
 

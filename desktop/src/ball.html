@@ -113,8 +113,8 @@ input, select, textarea, .todo-title, .edit-title-input {
 }
 .tabs button.active { color: #4f46e5; background: #fff; font-weight: 600; border-bottom-color: #4f46e5; }
 .tabs .collapse-btn {
-  flex: 0 0 34px !important; height: 100%; border: none !important; background: transparent;
-  color: #9ca3af; font-size: 13px; font-weight: 700; cursor: pointer;
+  flex: 0 0 56px !important; height: 100%; border: none !important; background: transparent;
+  color: #6b7280; font-size: 11px; font-weight: 600; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   border-bottom: 2px solid transparent !important;
   transition: color 0.15s, background 0.15s;
@@ -221,8 +221,8 @@ section.tab.active { display: block; }
 .empty { text-align: center; color: #9ca3af; font-size: 12px; padding: 24px 0; }
 </style>
 </head>
-<body class="shrunk">
-<div id="ball" data-state="idle">
+<body class="expanded">
+<div id="ball" data-state="idle" title="Focus Flow · 点击展开/收起面板，按住可拖动">
   <svg id="progress-ring" viewBox="0 0 80 80">
     <circle class="ring-bg" cx="40" cy="40" r="36" />
     <circle class="ring-bar" id="ring-bar" cx="40" cy="40" r="36" />
@@ -241,7 +241,7 @@ section.tab.active { display: block; }
     <button data-tab="focus">专注</button>
     <button data-tab="ai">AI</button>
     <button data-tab="settings">设置</button>
-    <button id="btn-collapse" class="collapse-btn" title="收起面板 (Esc)">✕</button>
+    <button id="btn-collapse" class="collapse-btn" title="收起为桌面悬浮球 (Esc)">✕ 收起</button>
   </div>
 
   <section class="tab active" id="tab-todo">
@@ -457,6 +457,10 @@ function toggleWhiteNoise(enable) {
 
 async function loadState() {
   state = await api.getState();
+  if (state && state.expanded !== undefined) {
+    ui.expanded = !!state.expanded;
+    document.body.className = state.expanded ? 'expanded' : 'shrunk';
+  }
   render();
 }
 
