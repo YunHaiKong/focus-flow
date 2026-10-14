@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: focus-flow-sync
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 23120
