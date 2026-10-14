@@ -123,7 +123,7 @@ function initSyncClient() {
   const cfg = load(CONFIG_FILE, {});
   const s = cfg.sync || {};
   syncClient = new SyncClient({
-    serverUrl: s.serverUrl || 'http://localhost:23120',
+    serverUrl: s.serverUrl || 'https://focus-flow-y68c.onrender.com',
     syncKey: s.syncKey || '',
     enabled: !!s.enabled,
     deviceId: s.deviceId || ('pc_' + Math.random().toString(36).slice(2, 7)),

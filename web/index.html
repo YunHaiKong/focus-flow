@@ -761,7 +761,7 @@
       </p>
       <div style="margin-bottom: 12px;">
         <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">云同步中枢地址</label>
-        <input type="text" id="web-sync-url" value="http://localhost:23120" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
+        <input type="text" id="web-sync-url" value="https://focus-flow-y68c.onrender.com" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
       </div>
       <div style="margin-bottom: 18px;">
         <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">设备配对密钥 (Sync Key)</label>
@@ -872,9 +872,9 @@
     function getSyncConfig() {
       try {
         const raw = localStorage.getItem(SYNC_CONFIG_KEY);
-        return raw ? JSON.parse(raw) : { enabled: false, serverUrl: 'http://localhost:23120', syncKey: '' };
+        return raw ? JSON.parse(raw) : { enabled: false, serverUrl: 'https://focus-flow-y68c.onrender.com', syncKey: '' };
       } catch (e) {
-        return { enabled: false, serverUrl: 'http://localhost:23120', syncKey: '' };
+        return { enabled: false, serverUrl: 'https://focus-flow-y68c.onrender.com', syncKey: '' };
       }
     }
 
@@ -912,7 +912,7 @@
         return;
       }
       syncClient = new FocusFlowSyncClient({
-        serverUrl: cfg.serverUrl || 'http://localhost:23120',
+        serverUrl: cfg.serverUrl || 'https://focus-flow-y68c.onrender.com',
         syncKey: cfg.syncKey || '',
         enabled: !!cfg.enabled,
         deviceId: 'web_' + Math.random().toString(36).slice(2, 8),
@@ -1558,7 +1558,7 @@
     const syncModal = document.getElementById('sync-modal');
     document.getElementById('btn-cloud-sync').addEventListener('click', () => {
       const cfg = getSyncConfig();
-      document.getElementById('web-sync-url').value = cfg.serverUrl || 'http://localhost:23120';
+      document.getElementById('web-sync-url').value = cfg.serverUrl || 'https://focus-flow-y68c.onrender.com';
       document.getElementById('web-sync-key').value = cfg.syncKey || '';
       document.getElementById('web-btn-disconnect-sync').style.display = cfg.enabled ? 'inline-flex' : 'none';
       syncModal.classList.add('open');
@@ -1577,7 +1577,7 @@
     });
 
     document.getElementById('web-btn-save-sync').addEventListener('click', () => {
-      const url = document.getElementById('web-sync-url').value.trim() || 'http://localhost:23120';
+      const url = document.getElementById('web-sync-url').value.trim() || 'https://focus-flow-y68c.onrender.com';
       const key = document.getElementById('web-sync-key').value.trim();
       if (!key) {
         alert('请输入或生成一个 Sync Key 配对密钥！');

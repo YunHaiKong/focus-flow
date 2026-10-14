@@ -293,7 +293,7 @@ section.tab.active { display: block; }
         <span id="sync-status-badge" style="font-size:10px;padding:2px 6px;border-radius:10px;background:#e5e7eb;color:#374151;">离线</span>
       </div>
       <label class="check" style="margin-bottom:6px;"><input type="checkbox" id="cfg-sync-enabled"> 启用跨设备云端实时同步</label>
-      <label style="margin-bottom:6px;">云服务器地址<input type="text" id="cfg-sync-url" placeholder="http://localhost:23120"></label>
+      <label style="margin-bottom:6px;">云服务器地址<input type="text" id="cfg-sync-url" placeholder="https://focus-flow-y68c.onrender.com"></label>
       <label style="margin-bottom:6px;">专属配对密钥 (Sync Key)
         <div style="display:flex;gap:6px;margin-top:4px;">
           <input type="text" id="cfg-sync-key" placeholder="如 ff_mykey123" style="margin-top:0;">
@@ -701,7 +701,7 @@ function renderSettings() {
 
   const s = c.sync || {};
   $('cfg-sync-enabled').checked = !!s.enabled;
-  if (document.activeElement !== $('cfg-sync-url')) $('cfg-sync-url').value = s.serverUrl || 'http://localhost:23120';
+  if (document.activeElement !== $('cfg-sync-url')) $('cfg-sync-url').value = s.serverUrl || 'https://focus-flow-y68c.onrender.com';
   if (document.activeElement !== $('cfg-sync-key')) $('cfg-sync-key').value = s.syncKey || '';
   updateSyncBadge(state.syncStatus || 'disconnected');
 }
@@ -798,7 +798,7 @@ $('cfg-save').addEventListener('click', async () => {
     edgeSnapping: $('cfg-snap').checked,
     sync: {
       enabled: $('cfg-sync-enabled').checked,
-      serverUrl: $('cfg-sync-url').value.trim() || 'http://localhost:23120',
+      serverUrl: $('cfg-sync-url').value.trim() || 'https://focus-flow-y68c.onrender.com',
       syncKey: $('cfg-sync-key').value.trim()
     }
   });
