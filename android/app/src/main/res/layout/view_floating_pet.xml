@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_floating_pet"
+    android:layout_width="72dp"
+    android:layout_height="72dp"
+    android:background="@android:color/transparent">
+
+    <!-- Progress Ring placeholder (if focusing) -->
+    <ProgressBar
+        android:id="@+id/progress_focus_ring"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:indeterminate="false"
+        android:max="100"
+        android:progress="0"
+        android:visibility="gone" />
+
+    <!-- Animated Elysia Pet -->
+    <ImageView
+        android:id="@+id/img_pet_sprite"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="center"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/app_name" />
+
+    <!-- Badge (Task count or checkmark or timer) -->
+    <TextView
+        android:id="@+id/tv_badge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="2dp"
+        android:layout_marginEnd="2dp"
+        android:background="@drawable/bg_badge_red"
+        android:gravity="center"
+        android:textColor="@color/white"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+</FrameLayout>

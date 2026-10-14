@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Focus Flow</string>
+    <string name="title_floating_ball">桌面萌宠悬浮球</string>
+    <string name="desc_floating_ball">像电脑端一样，直接在手机桌面上放置透明的爱莉希雅桌宠，随时拖拽与交互。</string>
+    <string name="btn_start_service">开启桌面桌宠悬浮球</string>
+    <string name="btn_stop_service">收起桌面悬浮球</string>
+    <string name="perm_overlay_title">需要悬浮窗权限</string>
+    <string name="perm_overlay_desc">请在系统设置中允许 Focus Flow「显示在其他应用的上层」</string>
+    <string name="btn_grant_perm">立即授权悬浮窗</string>
+    <string name="tab_todo">待办</string>
+    <string name="tab_focus">专注</string>
+    <string name="tab_settings">设置</string>
+    <string name="btn_postpone">未完顺延 ⏩</string>
+    <string name="hint_input_task">添加新任务，支持「明天3点 / 后天」</string>
+    <string name="sync_key_label">云同步配对码 (Sync Key)</string>
+    <string name="sync_server_label">同步服务地址</string>
+</resources>

@@ -1,0 +1,78 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          gradle assembleDebug --stacktrace
+          mkdir -p build-output
+          cp app/build/outputs/apk/debug/app-debug.apk build-output/FocusFlow-Android-v1.0.0.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FocusFlow-Android-v1.0.0
+          path: android/build-output/FocusFlow-Android-v1.0.0.apk
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: android-v1.0.0
+          name: "Focus Flow Android 桌面桌宠悬浮球 v1.0.0"
+          body: |
+            ## 🌸 Focus Flow Android 原生桌面桌宠悬浮球
+
+            ### 📱 安装包下载
+            - **[FocusFlow-Android-v1.0.0.apk](https://github.com/YunHaiKong/focus-flow/releases/download/android-v1.0.0/FocusFlow-Android-v1.0.0.apk)**
+
+            ---
+
+            ### ✨ 核心功能：
+            1. **真正系统级悬浮球 (`SYSTEM_ALERT_WINDOW`)**：
+               - 透明粉发萌宠（爱莉希雅）直接漂浮在 Android 手机桌面及任意应用上方，无需常驻打开网页。
+               - 任意拖拽与松手屏幕边缘磁吸靠拢。
+            2. **桌面一键呼出悬浮待办与番茄钟**：
+               - **单击桌宠**：瞬间展开/收起待办中心，支持勾选完成、滑动删除。
+               - **双击桌宠**：极速开启/停止 25 分钟番茄专注。
+            3. **未完顺延 ⏩ 与顺延天数标记**：
+               - 完美对齐电脑端设计，一键自动把昨天和历史未完成待办顺延至今日。
+               - 醒目橙色标签标注 `顺延 N 天`。
+            4. **跨端毫秒级实时同步**：
+               - 预置配对码 `ff_flow_888`，通过 WebSocket/REST 与电脑桌面悬浮球实时同步。
+            5. **系统剪贴板自动嗅探**：
+               - 复制任意包含 `#task 待办事项` 的文本，2秒内自动识别日期并加入今日待办！
+          files: android/build-output/FocusFlow-Android-v1.0.0.apk
+        continue-on-error: true
