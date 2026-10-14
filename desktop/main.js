@@ -2,7 +2,7 @@ const { app, BrowserWindow, screen, clipboard, ipcMain, Menu, Notification, shel
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
-const { fmt, addDays, extractDate, parseTaskText } = require('./src/parser');
+const { fmt, addDays, daysDiff, extractDate, parseTaskText } = require('./src/parser');
 const SyncClient = require('./src/sync-client');
 
 const PORT = 23119;
@@ -310,6 +310,8 @@ function addTask(text, source, priority = 'normal') {
       id: 't' + Date.now() + Math.random().toString(36).slice(2, 7),
       title: String(t.title || '新任务').slice(0, 120),
       date: t.date,
+      originalDate: t.date,
+      postponeCount: 0,
       time: t.time || null,
       priority: priority === 'high' ? 'high' : 'normal',
       status: 'todo',
@@ -327,6 +329,24 @@ function addTask(text, source, priority = 'normal') {
   notifyTaskAdded(parsed);
   refreshRenderer();
   return { ok: true, added: parsed.tasks.length, tasks: parsed.tasks };
+}
+
+function rolloverPastTasks(data) {
+  const today = todayStr();
+  let changed = false;
+  (data.tasks || []).forEach(t => {
+    if (!t.deleted && t.status !== 'done' && t.date && t.date < today) {
+      if (!t.originalDate) {
+        t.originalDate = t.date;
+      }
+      const diff = daysDiff(t.date, today);
+      t.postponeCount = (t.postponeCount || 0) + diff;
+      t.date = today;
+      t.updatedAt = Date.now();
+      changed = true;
+    }
+  });
+  return changed;
 }
 
 function setStatus(id, status) {
@@ -359,8 +379,12 @@ function postponeUndoneTasks() {
   const today = todayStr();
   const nextDay = addDays(today, 1);
   const changed = [];
-  data.tasks.forEach(t => {
-    if (t.date === today && t.status !== 'done') {
+  (data.tasks || []).forEach(t => {
+    if (!t.deleted && t.status !== 'done' && t.date && t.date <= today) {
+      if (!t.originalDate) {
+        t.originalDate = t.date;
+      }
+      t.postponeCount = (t.postponeCount || 0) + 1;
       t.date = nextDay;
       t.updatedAt = Date.now();
       changed.push(t);
@@ -379,7 +403,10 @@ function updateTask(id, fields) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return { ok: false, error: 'task not found' };
   if (fields.title !== undefined) t.title = String(fields.title).slice(0, 120);
-  if (fields.date !== undefined) t.date = fields.date;
+  if (fields.date !== undefined) {
+    if (fields.date !== t.date && !t.originalDate) t.originalDate = t.date;
+    t.date = fields.date;
+  }
   if (fields.time !== undefined) t.time = fields.time;
   if (fields.priority !== undefined) t.priority = fields.priority;
   if (fields.status !== undefined) t.status = fields.status;
@@ -627,10 +654,11 @@ function createBallWindow() {
     y: centerY,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: false,
-    hasShadow: true,
+    hasShadow: false,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -747,7 +775,11 @@ function startServer() {
         let date = todayStr();
         if (q) { const d = extractDate(q); if (d) date = d.date; }
         const data = load(TASKS_FILE, { tasks: [] });
-        return send(200, { date, tasks: (data.tasks || []).filter(t => t.date === date) });
+        if (date === todayStr() && rolloverPastTasks(data)) {
+          save(TASKS_FILE, data);
+          if (syncClient) syncClient.pushTasks(data.tasks.filter(t => t.date === date));
+        }
+        return send(200, { date, tasks: (data.tasks || []).filter(t => t.date === date && !t.deleted) });
       }
       if (u.pathname === '/api/history') {
         const status = u.searchParams.get('status') || '';
@@ -898,7 +930,11 @@ async function askAI(message) {
 ipcMain.handle('get-state', () => {
   const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
   const today = todayStr();
-  const dayTasks = (data.tasks || []).filter(t => t.date === today);
+  if (rolloverPastTasks(data)) {
+    save(TASKS_FILE, data);
+    if (syncClient) syncClient.pushTasks(data.tasks.filter(t => t.date === today));
+  }
+  const dayTasks = (data.tasks || []).filter(t => t.date === today && !t.deleted);
   // Sort: high priority first, then createdAt
   dayTasks.sort((a, b) => {
     if (a.priority === 'high' && b.priority !== 'high') return -1;

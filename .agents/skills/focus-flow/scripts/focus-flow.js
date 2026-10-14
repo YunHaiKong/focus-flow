@@ -97,13 +97,26 @@ async function main() {
 
   if (action === 'list') {
     const dateQuery = args[1] ? `?date=${encodeURIComponent(args[1])}` : '';
+    function calcPostpone(tasks) {
+      return (tasks || []).map(t => {
+        let postponeDays = t.postponeCount || 0;
+        if (t.originalDate && t.date && t.originalDate < t.date) {
+          const d1 = new Date(t.originalDate + 'T00:00:00');
+          const d2 = new Date(t.date + 'T00:00:00');
+          postponeDays = Math.max(0, Math.round((d2 - d1) / 86400000));
+        }
+        return { ...t, postponeDays };
+      });
+    }
     if (running) {
       const res = await request('GET', `/api/today${dateQuery}`);
-      console.log(JSON.stringify(res.data, null, 2));
+      const data = res.data;
+      if (data && Array.isArray(data.tasks)) data.tasks = calcPostpone(data.tasks);
+      console.log(JSON.stringify(data, null, 2));
     } else {
       if (fs.existsSync(TASKS_FILE)) {
         const raw = JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8') || '{"tasks":[]}');
-        console.log(JSON.stringify({ ok: true, offline: true, tasks: raw.tasks || [] }, null, 2));
+        console.log(JSON.stringify({ ok: true, offline: true, tasks: calcPostpone(raw.tasks || []) }, null, 2));
       } else {
         console.log(JSON.stringify({ ok: true, tasks: [] }, null, 2));
       }

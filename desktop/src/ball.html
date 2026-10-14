@@ -5,11 +5,23 @@
 <title>Focus Flow</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
-html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+html, body {
+  width: 100%; height: 100%;
+  background: transparent !important;
+  overflow: hidden; user-select: none;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 #ball {
-  position: absolute; right: 0; bottom: 0; width: 80px; height: 80px; border-radius: 50%;
-  background: transparent; color: #fff; display: flex; align-items: center; justify-content: center;
+  position: absolute; right: 0; bottom: 0; width: 80px; height: 80px;
+  background: transparent !important; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important; outline: none !important;
   cursor: grab; user-select: none;
   transition: transform 0.15s;
   -webkit-app-region: no-drag;
@@ -19,14 +31,14 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 
 #sprite {
   width: 85%; height: 85%; object-fit: contain; pointer-events: none; z-index: 2;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+  filter: none !important;
 }
 
 /* SVG Progress Ring */
 #progress-ring {
   position: absolute; inset: 0; width: 100%; height: 100%;
   pointer-events: none; transform: rotate(-90deg); overflow: visible;
-  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.22)); z-index: 1;
+  filter: none !important; z-index: 1;
 }
 .ring-bg {
   fill: none; stroke: rgba(255, 255, 255, 0.22); stroke-width: 4;
@@ -144,6 +156,12 @@ section.tab.active { display: block; }
 .todo-item.done .todo-title { text-decoration: line-through; cursor: default; }
 .todo-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; }
 .src-tag { font-size: 10px; padding: 1px 5px; border-radius: 6px; background: #eef2ff; color: #6366f1; }
+.postpone-tag {
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+  background: #fffbeb; color: #d97706; border: 1px solid #fde68a;
+  display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
+}
+.todo-item.done .postpone-tag { background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb; }
 .del-btn { border: none; background: none; color: #9ca3af; cursor: pointer; padding: 2px 5px; font-size: 12px; opacity: 0.6; }
 .del-btn:hover { opacity: 1; color: #ef4444; }
 
@@ -388,6 +406,21 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function getPostponeDays(t) {
+  if (!t) return 0;
+  if (t.originalDate && t.date && t.originalDate < t.date) {
+    const d1 = new Date(t.originalDate + 'T00:00:00');
+    const d2 = new Date(t.date + 'T00:00:00');
+    const diff = Math.max(0, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
+    if (diff > 0) return diff;
+  }
+  return t.postponeCount || 0;
+}
+
+function sourceLabel(s) {
+  return { manual: '手动', http: 'AI/接口', clipboard: '剪贴板', inbox: '文件', ai: '内置AI', 'gemini-skill': 'AI/Skill' }[s] || s;
+}
+
 function playChime() {
   if (state.config && state.config.soundEnabled === false) return;
   try {
@@ -562,16 +595,22 @@ function renderTodo() {
     list.innerHTML = '<div class="empty">今天没有任务，输入框添加或让 AI 帮你填</div>';
     return;
   }
-  list.innerHTML = state.tasks.map(t => `
+  list.innerHTML = state.tasks.map(t => {
+    const postponeDays = getPostponeDays(t);
+    return `
     <div class="todo-item ${t.status === 'done' ? 'done' : ''} ${t.priority === 'high' ? 'high' : ''}">
       <button class="star-btn ${t.priority === 'high' ? 'high' : ''}" data-id="${t.id}" title="切换优先级">${t.priority === 'high' ? '⭐' : '☆'}</button>
       <input type="checkbox" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>
       <div class="todo-main">
         <div class="todo-title" data-id="${t.id}" title="双击可就地编辑内容">${escapeHtml(t.title)}</div>
-        <div class="todo-meta">${t.time ? t.time + ' · ' : ''}${t.focusMinutes ? '已专注' + t.focusMinutes + '分钟 · ' : ''}<span class="src-tag">${t.source}</span></div>
+        <div class="todo-meta">
+          ${postponeDays > 0 ? `<span class="postpone-tag" title="原定于 ${t.originalDate || '之前'}，已顺延 ${postponeDays} 天">顺延 ${postponeDays} 天</span> · ` : ''}
+          ${t.time ? t.time + ' · ' : ''}${t.focusMinutes ? '已专注' + t.focusMinutes + '分钟 · ' : ''}<span class="src-tag">${sourceLabel(t.source)}</span>
+        </div>
       </div>
       <button class="del-btn" data-id="${t.id}" title="删除任务">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('change', () => api.setStatus(cb.dataset.id, cb.checked ? 'done' : 'todo').then(loadState));
@@ -746,7 +785,9 @@ async function doAdd() {
 $('btn-postpone').addEventListener('click', async () => {
   const r = await api.postponeUndone();
   if (r.postponed > 0) {
-    appendMsg('bot', `已将 ${r.postponed} 个未完成任务顺延至明天（${r.nextDate}）`);
+    appendMsg('bot', `已将 ${r.postponed} 个未完成任务顺延至明天（${r.nextDate}），已自动标记顺延天数。保持好心情，明天继续加油！`);
+  } else {
+    appendMsg('bot', '今天没有未完成的任务需要顺延哦。');
   }
   loadState();
 });

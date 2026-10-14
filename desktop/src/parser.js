@@ -11,6 +11,14 @@ function addDays(baseStr, n) {
   return fmt(d);
 }
 
+function daysDiff(d1, d2) {
+  if (!d1 || !d2) return 0;
+  const dt1 = new Date(d1 + 'T00:00:00');
+  const dt2 = new Date(d2 + 'T00:00:00');
+  const diffTime = dt2.getTime() - dt1.getTime();
+  return Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+}
+
 const WEEK_CN = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
 
 function extractDate(text) {
@@ -129,4 +137,4 @@ function parseTaskText(raw) {
   return { tasks, reply: `已解析 ${tasks.length} 个任务` };
 }
 
-module.exports = { fmt, addDays, extractDate, extractTime, parseTaskText };
+module.exports = { fmt, addDays, daysDiff, extractDate, extractTime, parseTaskText };
