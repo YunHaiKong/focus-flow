@@ -73,10 +73,10 @@ app.whenReady().then(async () => {
 
   const icoBuffer = Buffer.concat([header, ...entryBuffers, ...dataBuffers]);
   
-  // Save as both app.ico and icon.ico (app.ico guarantees cache bust on Windows!)
+  fs.writeFileSync(path.join(assetsDir, 'focus.ico'), icoBuffer);
   fs.writeFileSync(path.join(assetsDir, 'app.ico'), icoBuffer);
   fs.writeFileSync(path.join(assetsDir, 'icon.ico'), icoBuffer);
-  console.log('Saved app.ico successfully, size:', icoBuffer.length);
+  console.log('Saved focus.ico successfully, size:', icoBuffer.length);
 
   app.quit();
 });

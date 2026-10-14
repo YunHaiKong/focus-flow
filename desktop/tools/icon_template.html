@@ -11,14 +11,14 @@
   }
   .icon-container {
     width: 480px; height: 480px;
-    background: linear-gradient(155deg, #1a1c23 0%, #0c0d12 100%);
+    background: linear-gradient(150deg, #ffffff 0%, #f6f8fc 50%, #e9eef6 100%);
     border-radius: 118px;
-    box-shadow: 0 24px 52px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.16), inset 0 -1px 1px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.15), 0 6px 16px rgba(15, 23, 42, 0.08), inset 0 1px 2px rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(15, 23, 42, 0.07);
     display: flex; align-items: center; justify-content: center;
     position: relative;
   }
   svg {
-    width: 290px; height: 290px;
+    width: 370px; height: 370px;
   }
 </style>
 </head>
@@ -26,25 +26,27 @@
 <div class="icon-container">
   <svg viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
+      <!-- Outer Precision Ring: Deep elegant slate to rich sapphire -->
       <linearGradient id="outerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#ffffff" />
-        <stop offset="60%" stop-color="#cbd5e1" />
-        <stop offset="100%" stop-color="#64748b" />
+        <stop offset="0%" stop-color="#0f172a" />
+        <stop offset="60%" stop-color="#1e293b" />
+        <stop offset="100%" stop-color="#334155" />
       </linearGradient>
+      <!-- Inner Flow Arc: Vibrant clean indigo -->
       <linearGradient id="innerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#818cf8" />
+        <stop offset="0%" stop-color="#4f46e5" />
         <stop offset="100%" stop-color="#6366f1" />
       </linearGradient>
     </defs>
 
-    <!-- Outer Precision Focus Ring (Timer Dial Opening at 12 o'clock) -->
-    <circle cx="120" cy="120" r="90" stroke="url(#outerGrad)" stroke-width="14" stroke-linecap="round" stroke-dasharray="465 100" transform="rotate(-65 120 120)" />
+    <!-- Outer Precision Focus Ring (Opening at top, bolder & prominent) -->
+    <circle cx="120" cy="120" r="98" stroke="url(#outerGrad)" stroke-width="19" stroke-linecap="round" stroke-dasharray="510 110" transform="rotate(-65 120 120)" />
 
-    <!-- Flow Lens: Streamlined fluid inner loop -->
-    <circle cx="120" cy="120" r="54" stroke="url(#innerGrad)" stroke-width="11" stroke-linecap="round" stroke-dasharray="260 80" transform="rotate(115 120 120)" />
+    <!-- Inner Streamlined Flow Arc (Concentric, bolder & crisp) -->
+    <circle cx="120" cy="120" r="58" stroke="url(#innerGrad)" stroke-width="15" stroke-linecap="round" stroke-dasharray="280 90" transform="rotate(115 120 120)" />
 
     <!-- Center Zen Focus Point -->
-    <circle cx="120" cy="120" r="16" fill="#ffffff" />
+    <circle cx="120" cy="120" r="18" fill="#0f172a" />
   </svg>
 </div>
 </body>
