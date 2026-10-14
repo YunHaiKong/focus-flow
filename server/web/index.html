@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Flow - AI 任务看板与番茄钟</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="icon.png">
+  <script src="sync-client.js"></script>
+  <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1f2937;
+      --text-secondary: #6b7280;
+      --border: #e5e7eb;
+      --primary: #4f46e5;
+      --primary-light: #e0e7ff;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .app { max-width: 1400px; margin: 0 auto; padding: 24px; padding-bottom: 120px; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    h1 { font-size: 28px; font-weight: 700; }
+    h1 span { color: var(--primary); }
+
+    .subtitle { color: var(--text-secondary); font-size: 14px; }
+
+    .stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: var(--card);
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 120px;
+      text-align: center;
+    }
+
+    .stat-card .number {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .input-area {
+      background: var(--card);
+      padding: 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .input-tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+
+    .tab {
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      background: transparent;
+      border: 1px solid transparent;
+    }
+
+    .tab.active {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .tab:hover:not(.active) { background: var(--bg); }
+
+    .input-panel { display: none; }
+    .input-panel.active { display: block; }
+
+    .upload-box {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-secondary);
+    }
+
+    .upload-box:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .upload-box.dragover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .nlp-box {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .nlp-box input {
+      flex: 1;
+      min-width: 260px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: #4338ca; }
+
+    .btn-secondary {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-warning {
+      background: var(--warning);
+      color: white;
+    }
+
+    .ocr-status {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 14px;
+      display: none;
+    }
+
+    .ocr-status.visible { display: block; }
+
+    .calendar-strip {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 12px 4px;
+      margin-bottom: 24px;
+    }
+
+    .day-pill {
+      flex-shrink: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      min-width: 100px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .day-pill:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+    }
+
+    .day-pill.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .day-pill .date { font-size: 14px; font-weight: 600; }
+    .day-pill .weekday { font-size: 12px; opacity: 0.8; }
+    .day-pill .count {
+      font-size: 11px;
+      margin-top: 4px;
+      padding: 2px 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+      display: inline-block;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .column {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      min-height: 300px;
+    }
+
+    .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .column-title {
+      font-weight: 600;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .column-count {
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .task-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      cursor: grab;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .task-card:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .task-card.dragging { opacity: 0.5; }
+
+    .task-card .task-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .task-card .task-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .task-card .task-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .tag {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .tag-primary { background: var(--primary-light); color: var(--primary); }
+    .tag-success { background: #d1fae5; color: #065f46; }
+    .tag-warning { background: #fef3c7; color: #92400e; }
+    .tag-danger { background: #fee2e2; color: #991b1b; }
+
+    .day-detail {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .day-detail h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .day-detail h2 .date-tag {
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+    }
+
+    .day-tasks { display: flex; flex-direction: column; gap: 12px; }
+
+    .day-task-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px;
+      background: var(--bg);
+      border-radius: 10px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .day-task-item.done { border-left-color: var(--success); opacity: 0.7; }
+
+    .day-task-item input[type="checkbox"] {
+      margin-top: 4px;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .day-task-content { flex: 1; }
+    .day-task-content h4 { font-size: 15px; margin-bottom: 4px; }
+    .day-task-content p { font-size: 13px; color: var(--text-secondary); }
+    .day-task-item.done h4 { text-decoration: line-through; color: var(--text-secondary); }
+    .postpone-tag {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      background: #fffbeb; color: #d97706; border: 1px solid #fde68a;
+      white-space: nowrap; margin-left: 6px; vertical-align: middle;
+    }
+    .day-task-item.done .postpone-tag {
+      background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb;
+    }
+
+    .floating-ball {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3);
+      transition: all 0.2s;
+      z-index: 1000;
+      user-select: none;
+    }
+
+    .floating-ball:hover { transform: scale(1.1); }
+    .floating-ball.active { transform: rotate(45deg); }
+
+    .floating-menu {
+      position: fixed;
+      bottom: 96px;
+      right: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(20px);
+      transition: all 0.2s;
+    }
+
+    .floating-menu.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .floating-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card);
+      padding: 10px 16px;
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .floating-menu-item:hover {
+      background: var(--primary);
+      color: white;
+    }
+
+    .floating-menu-item .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 20px;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+      animation: modalIn 0.2s ease-out;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h3 { font-size: 18px; }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+
+    .timer-display {
+      font-size: 64px;
+      font-weight: 700;
+      text-align: center;
+      color: var(--primary);
+      margin: 24px 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timer-task {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    .timer-controls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .timer-modes {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .mode-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .mode-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .progress-ring {
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 20px;
+    }
+
+    .progress-ring circle {
+      transition: stroke-dashoffset 0.35s;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h3 { margin-bottom: 8px; color: var(--text); }
+
+    .nlp-examples {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .nlp-example {
+      font-size: 12px;
+      padding: 4px 10px;
+      background: var(--bg);
+      border-radius: 12px;
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+
+    .nlp-example:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+      .app { padding: 16px; padding-bottom: 100px; }
+      h1 { font-size: 22px; }
+      .board { grid-template-columns: 1fr; }
+      .stats { width: 100%; }
+      .stat-card { flex: 1; min-width: 80px; }
+      .floating-ball { bottom: 20px; right: 20px; }
+      .floating-menu { bottom: 88px; right: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Focus <span>Flow</span></h1>
+        <p class="subtitle">上传图片或输入自然语言，自动生成任务看板与专注计划</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button id="btn-cloud-sync" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow);transition:all 0.2s;">
+          <span>☁️</span> <span id="web-sync-text">云同步: 离线 ⚪</span>
+        </button>
+        <div class="stats">
+          <div class="stat-card">
+            <div class="number" id="stat-total">0</div>
+            <div class="label">总任务</div>
+          </div>
+          <div class="stat-card">
+            <div class="number" id="stat-today">0</div>
+            <div class="label">今日待办</div>
+          </div>
+          <div class="stat-card">
+            <div class="number" id="stat-focus">0</div>
+            <div class="label">专注分钟</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="input-area">
+      <div class="input-tabs">
+        <div class="tab active" data-tab="image">📷 图片识别</div>
+        <div class="tab" data-tab="nlp">💬 自然语言</div>
+        <div class="tab" data-tab="manual">✏️ 手动添加</div>
+      </div>
+
+      <div class="input-panel active" id="panel-image">
+        <div class="upload-box" id="upload-box">
+          <div style="font-size: 32px; margin-bottom: 8px;">📤</div>
+          <p>点击或拖拽上传任务表格图片</p>
+          <p style="font-size: 12px; margin-top: 8px;">支持 JPG、PNG，自动 OCR 识别任务</p>
+          <input type="file" id="image-input" accept="image/*" hidden>
+        </div>
+        <div class="ocr-status" id="ocr-status">正在识别图片内容，请稍候...</div>
+      </div>
+
+      <div class="input-panel" id="panel-nlp">
+        <div class="nlp-box">
+          <input type="text" id="nlp-input" placeholder="例如：后天/10.16我要干什么？">
+          <button class="btn btn-primary" id="nlp-btn">查询</button>
+        </div>
+        <div class="nlp-examples">
+          <span class="nlp-example" data-query="后天我要干什么">后天我要干什么</span>
+          <span class="nlp-example" data-query="10.16我要干什么">10.16我要干什么</span>
+          <span class="nlp-example" data-query="明天有什么任务">明天有什么任务</span>
+          <span class="nlp-example" data-query="本周计划">本周计划</span>
+        </div>
+        <div id="nlp-result" style="margin-top: 16px;"></div>
+      </div>
+
+      <div class="input-panel" id="panel-manual">
+        <div style="display: grid; gap: 12px;">
+          <input type="text" id="manual-title" placeholder="任务名称" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px;">
+          <textarea id="manual-desc" placeholder="任务描述" rows="2" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; resize: vertical;"></textarea>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <input type="date" id="manual-start" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px;">
+            <input type="number" id="manual-days" placeholder="天数" min="1" value="1" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; width: 100px;">
+          </div>
+          <button class="btn btn-primary" id="manual-add" style="width: fit-content;">添加任务</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="calendar-strip" id="calendar-strip"></div>
+
+    <section class="day-detail" id="day-detail">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="margin-bottom:0;">
+          <span id="selected-date-label">今日任务</span>
+          <span class="date-tag" id="selected-date-tag">10月13日</span>
+        </h2>
+        <button id="btn-web-postpone" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:20px;">未完顺延 ⏩</button>
+      </div>
+      <div class="day-tasks" id="day-tasks"></div>
+    </section>
+
+    <section class="board" id="board">
+      <div class="column" data-status="todo">
+        <div class="column-header">
+          <div class="column-title">📝 待办</div>
+          <span class="column-count" id="count-todo">0</span>
+        </div>
+        <div class="column-body" id="col-todo"></div>
+      </div>
+      <div class="column" data-status="doing">
+        <div class="column-header">
+          <div class="column-title">🚀 进行中</div>
+          <span class="column-count" id="count-doing">0</span>
+        </div>
+        <div class="column-body" id="col-doing"></div>
+      </div>
+      <div class="column" data-status="done">
+        <div class="column-header">
+          <div class="column-title">✅ 已完成</div>
+          <span class="column-count" id="count-done">0</span>
+        </div>
+        <div class="column-body" id="col-done"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="floating-ball" id="fab">+</div>
+  <div class="floating-menu" id="fab-menu">
+    <div class="floating-menu-item" id="fab-focus">
+      <span class="icon">🍅</span>
+      <span>开始专注</span>
+    </div>
+    <div class="floating-menu-item" id="fab-today">
+      <span class="icon">📅</span>
+      <span>今日任务</span>
+    </div>
+    <div class="floating-menu-item" id="fab-add">
+      <span class="icon">✏️</span>
+      <span>添加任务</span>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="focus-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🍅 专注计时</h3>
+        <button class="close-btn" id="close-focus">&times;</button>
+      </div>
+      <div style="text-align:center;margin:6px 0;">
+        <img id="timer-pet-sprite" src="sprites/idle1.gif" style="width:58px;height:58px;object-fit:contain;" alt="Elysia">
+      </div>
+      <div class="timer-task" id="timer-task">选择一个任务开始专注</div>
+      <svg class="progress-ring" viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="90" fill="none" stroke="#e5e7eb" stroke-width="8"/>
+        <circle id="progress-circle" cx="100" cy="100" r="90" fill="none" stroke="#4f46e5" stroke-width="8" stroke-linecap="round" stroke-dasharray="565.48" stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-display" id="timer-display">25:00</div>
+      <div class="timer-modes">
+        <button class="mode-btn active" data-minutes="25">专注 25</button>
+        <button class="mode-btn" data-minutes="15">短 15</button>
+        <button class="mode-btn" data-minutes="5">休息 5</button>
+      </div>
+      <div class="timer-controls">
+        <button class="btn btn-success" id="timer-start">开始</button>
+        <button class="btn btn-warning" id="timer-pause" style="display:none;">暂停</button>
+        <button class="btn btn-secondary" id="timer-reset">重置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="sync-modal">
+    <div class="modal" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>☁️ Focus Flow 三端云同步</h3>
+        <button class="close-btn" id="close-sync">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+        输入与桌面悬浮球相同的 <strong>Sync Key 配对码</strong>，即可秒级实时双向同步待办与番茄钟！
+      </p>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">云同步中枢地址</label>
+        <input type="text" id="web-sync-url" value="https://focus-flow-y68c.onrender.com" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
+      </div>
+      <div style="margin-bottom: 18px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">设备配对密钥 (Sync Key)</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="web-sync-key" placeholder="例如 ff_8921a" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
+          <button id="web-btn-genkey" class="btn btn-secondary" style="padding: 8px 12px; font-size: 12px; white-space: nowrap;">随机生成</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button id="web-btn-save-sync" class="btn btn-success" style="flex: 1; padding: 10px;">保存并连接同步</button>
+        <button id="web-btn-disconnect-sync" class="btn btn-secondary" style="padding: 10px;">断开</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== Data & State ====================
+    const STORAGE_KEY = 'focus-flow-data';
+    let tasks = [];
+    let selectedDate = formatDate(new Date());
+    let focusTaskId = null;
+
+    // Demo data from the provided image
+    const demoTasks = [
+      {
+        id: 'task-1',
+        title: 'Task 1: Isaacsim环境安装与基本控制',
+        description: '完成1-2章的环境配置与基础使用；完成4-5章的G2机器人基本控制；熟悉Isaacsim基本功能，掌握G2轮式双臂机器人的底盘、机械臂结构；扩展：完成第6章综合实践，理解底盘与机械臂协作控制。',
+        startDate: '2026-10-12',
+        endDate: '2026-10-16',
+        durationDays: 4,
+        source: 'image',
+        status: 'doing',
+        tags: ['Isaacsim', 'G2机器人', '基础控制'],
+        subtasks: [
+          { date: '2026-10-12', title: '环境配置与基础使用（第1-2章）', description: '安装Isaacsim，跑通基础示例', status: 'done', focusMinutes: 0 },
+          { date: '2026-10-13', title: 'G2机器人底盘控制（第4章）', description: '熟悉底盘运动控制接口', status: 'doing', focusMinutes: 0 },
+          { date: '2026-10-14', title: 'G2机器人机械臂控制（第5章）', description: '掌握机械臂基本运动与坐标', status: 'todo', focusMinutes: 0 },
+          { date: '2026-10-15', title: '底盘+机械臂协作控制（第6章扩展）', description: '完成综合实践，理解协作控制', status: 'todo', focusMinutes: 0 },
+          { date: '2026-10-16', title: '打卡提交：实验截图 + 结构/控制方法简述', description: '整理实验截图，撰写G2机器人结构和控制方法说明', status: 'todo', focusMinutes: 0 }
+        ]
+      },
+      {
+        id: 'task-2',
+        title: 'Task 2: G2机器人视觉感知与建图',
+        description: '完成第7章视觉感知算法；完成第8章雷达点云建图；理解机器人感知能力构成、视觉图像处理与YOLO算法、雷达点云处理与建图原理；扩展：完成第9章综合实践，实现机械臂视觉引导抓取与放置。',
+        startDate: '2026-10-16',
+        endDate: '2026-10-19',
+        durationDays: 3,
+        source: 'image',
+        status: 'todo',
+        tags: ['YOLO', '点云建图', '视觉感知'],
+        subtasks: [
+          { date: '2026-10-16', title: '视觉感知算法基础（第7章）', description: '图像预处理、YOLO目标检测原理', status: 'todo', focusMinutes: 0 },
+          { date: '2026-10-17', title: '雷达点云建图（第8章）', description: '点云处理、2D/3D建图原理', status: 'todo', focusMinutes: 0 },
+          { date: '2026-10-18', title: '视觉引导抓取与放置（第9章扩展）', description: '机械臂+视觉综合实践', status: 'todo', focusMinutes: 0 },
+          { date: '2026-10-19', title: '打卡提交：YOLO检测结果 + 2D/3D建图结果', description: '导出检测截图和建图结果', status: 'todo', focusMinutes: 0 }
+        ]
+      }
+    ];
+
+    // ==================== Utilities ====================
+    function formatDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function parseDate(str) {
+      // Try multiple formats: 2026-10-16, 10.16, 10月16日, 10/16
+      const iso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
+
+      const cn = str.match(/(\d{1,2})月\s*(\d{1,2})日/);
+      if (cn) return `${new Date().getFullYear()}-${String(cn[1]).padStart(2,'0')}-${String(cn[2]).padStart(2,'0')}`;
+
+      const short = str.match(/(\d{1,2})[.\/](\d{1,2})/);
+      if (short) return `${new Date().getFullYear()}-${String(short[1]).padStart(2,'0')}-${String(short[2]).padStart(2,'0')}`;
+
+      return null;
+    }
+
+    function addDays(dateStr, days) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + days);
+      return formatDate(d);
+    }
+
+    function getWeekday(dateStr) {
+      const days = ['周日','周一','周二','周三','周四','周五','周六'];
+      return days[new Date(dateStr + 'T00:00:00').getDay()];
+    }
+
+    function getDisplayDate(dateStr) {
+      const [y, m, d] = dateStr.split('-');
+      return `${parseInt(m)}月${parseInt(d)}日`;
+    }
+
+    function generateId() {
+      return 'task-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    }
+
+    // ==================== Storage & Cloud Sync ====================
+    let syncClient = null;
+    const SYNC_CONFIG_KEY = 'focus-flow-sync-cfg';
+
+    function getSyncConfig() {
+      try {
+        const raw = localStorage.getItem(SYNC_CONFIG_KEY);
+        return raw ? JSON.parse(raw) : { enabled: false, serverUrl: 'https://focus-flow-y68c.onrender.com', syncKey: '' };
+      } catch (e) {
+        return { enabled: false, serverUrl: 'https://focus-flow-y68c.onrender.com', syncKey: '' };
+      }
+    }
+
+    function saveSyncConfig(cfg) {
+      localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg));
+    }
+
+    function updateWebSyncBadge(status) {
+      const el = document.getElementById('web-sync-text');
+      const btn = document.getElementById('btn-cloud-sync');
+      if (!el || !btn) return;
+      if (status === 'connected') {
+        el.textContent = '云同步: 实时连通 🟢';
+        btn.style.borderColor = '#16a34a';
+        btn.style.color = '#15803d';
+      } else if (status === 'connecting') {
+        el.textContent = '云同步: 连接中 🟡';
+        btn.style.borderColor = '#ca8a04';
+        btn.style.color = '#a16207';
+      } else if (status === 'error') {
+        el.textContent = '云同步: 异常重试 🔴';
+        btn.style.borderColor = '#dc2626';
+        btn.style.color = '#b91c1c';
+      } else {
+        el.textContent = '云同步: 离线 ⚪';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    }
+
+    function initWebSync() {
+      const cfg = getSyncConfig();
+      if (typeof FocusFlowSyncClient === 'undefined') {
+        console.warn('SyncClient not loaded');
+        return;
+      }
+      syncClient = new FocusFlowSyncClient({
+        serverUrl: cfg.serverUrl || 'https://focus-flow-y68c.onrender.com',
+        syncKey: cfg.syncKey || '',
+        enabled: !!cfg.enabled,
+        deviceId: 'web_' + Math.random().toString(36).slice(2, 8),
+        onStatusChange: status => updateWebSyncBadge(status),
+        onTasksReceived: incoming => mergeIncomingFromSync(incoming),
+        onFocusReceived: fState => applyIncomingFocusWeb(fState)
+      });
+
+      if (cfg.enabled && cfg.syncKey) {
+        syncClient.connect();
+      } else {
+        updateWebSyncBadge('disconnected');
+      }
+    }
+
+    function mergeIncomingFromSync(incoming) {
+      if (!Array.isArray(incoming) || incoming.length === 0) return;
+      let modified = false;
+
+      for (const inc of incoming) {
+        if (!inc || !inc.id) continue;
+        const idx = tasks.findIndex(t => t.id === inc.id);
+        if (idx >= 0) {
+          const existing = tasks[idx];
+          if ((inc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            if (inc.deleted) {
+              tasks.splice(idx, 1);
+            } else {
+              tasks[idx] = Object.assign({}, existing, inc);
+            }
+            modified = true;
+          }
+        } else if (!inc.deleted) {
+          tasks.push(inc);
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        renderAll();
+      }
+    }
+
+    function applyIncomingFocusWeb(inc) {
+      if (!inc) return;
+      if (inc.status === 'running') {
+        const remain = Math.max(0, Math.round(((inc.endsAt || 0) - Date.now()) / 1000));
+        if (remain > 0) {
+          totalSeconds = inc.totalSeconds || 1500;
+          remainingSeconds = remain;
+          updateTimerDisplay();
+          if (!isRunning) startTimer(true);
+        }
+      } else if (inc.status === 'paused') {
+        pauseTimer(true);
+      } else if (inc.status === 'idle') {
+        resetTimer(true);
+      }
+    }
+
+    function loadData() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          tasks = JSON.parse(saved);
+          return;
+        } catch (e) {}
+      }
+      tasks = JSON.parse(JSON.stringify(demoTasks));
+      saveData(true);
+    }
+
+    function saveData(skipPush = false, mutatedTasks = null) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      if (!skipPush && syncClient && syncClient.enabled) {
+        const toPush = mutatedTasks || tasks.map(t => Object.assign({}, t, { updatedAt: Date.now() }));
+        syncClient.pushTasks(toPush);
+      }
+    }
+
+    // ==================== Rendering ====================
+    function renderCalendar() {
+      const strip = document.getElementById('calendar-strip');
+      strip.innerHTML = '';
+
+      // Show 14 days starting from project start (or today if later)
+      const start = new Date('2026-10-12T00:00:00');
+      const today = new Date();
+      const base = today < start ? start : today;
+
+      for (let i = -2; i < 12; i++) {
+        const d = new Date(base);
+        d.setDate(d.getDate() + i);
+        const ds = formatDate(d);
+        const isToday = ds === formatDate(new Date());
+        const isSelected = ds === selectedDate;
+        const dayTasks = getTasksForDate(ds);
+
+        const pill = document.createElement('div');
+        pill.className = `day-pill ${isSelected ? 'active' : ''}`;
+        pill.innerHTML = `
+          <div class="date">${getDisplayDate(ds)}${isToday ? ' · 今天' : ''}</div>
+          <div class="weekday">${getWeekday(ds)}</div>
+          <div class="count">${dayTasks.length} 项</div>
+        `;
+        pill.addEventListener('click', () => {
+          selectedDate = ds;
+          renderCalendar();
+          renderDayDetail();
+        });
+        strip.appendChild(pill);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function sourceLabel(s) {
+      return { manual: '手动', http: 'AI/接口', clipboard: '剪贴板', inbox: '文件', ai: '内置AI', 'gemini-skill': 'AI/Skill', nlp: '自然语言', image: '图片' }[s] || s || '桌面同步';
+    }
+
+    function getPostponeDays(item) {
+      if (!item) return 0;
+      if (item.originalDate && item.date && item.originalDate < item.date) {
+        const d1 = new Date(item.originalDate + 'T00:00:00');
+        const d2 = new Date(item.date + 'T00:00:00');
+        const diff = Math.max(0, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
+        if (diff > 0) return diff;
+      }
+      return item.postponeCount || 0;
+    }
+
+    function getTasksForDate(dateStr) {
+      const result = [];
+      (tasks || []).forEach(task => {
+        if (!task || task.deleted) return;
+        if (task.subtasks && Array.isArray(task.subtasks)) {
+          task.subtasks.forEach((sub, idx) => {
+            if (sub.date === dateStr) {
+              result.push({
+                ...sub,
+                taskTitle: task.title,
+                taskId: task.id,
+                subIndex: idx,
+                originalDate: sub.originalDate || task.originalDate,
+                postponeCount: sub.postponeCount || task.postponeCount,
+                source: sub.source || task.source
+              });
+            }
+          });
+        } else if (task.date === dateStr) {
+          result.push({
+            ...task,
+            taskTitle: task.title,
+            taskId: task.id,
+            subIndex: -1,
+            originalDate: task.originalDate,
+            postponeCount: task.postponeCount,
+            source: task.source
+          });
+        }
+      });
+      return result;
+    }
+
+    function renderDayDetail() {
+      const container = document.getElementById('day-tasks');
+      const label = document.getElementById('selected-date-label');
+      const tag = document.getElementById('selected-date-tag');
+      const dayTasks = getTasksForDate(selectedDate);
+
+      label.textContent = selectedDate === formatDate(new Date()) ? '今日任务' : '任务清单';
+      tag.textContent = getDisplayDate(selectedDate) + ' ' + getWeekday(selectedDate);
+
+      if (dayTasks.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🌴</div>
+            <h3>当天没有任务</h3>
+            <p>休息一下吧，或者添加新任务</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = dayTasks.map(item => {
+        const pDays = getPostponeDays(item);
+        return `
+        <div class="day-task-item ${item.status === 'done' ? 'done' : ''}" data-task="${item.taskId}" data-sub="${item.subIndex}">
+          <input type="checkbox" ${item.status === 'done' ? 'checked' : ''}>
+          <div class="day-task-content">
+            <h4>
+              ${escapeHtml(item.title)}
+              ${pDays > 0 ? `<span class="postpone-tag" title="原定于 ${item.originalDate || '之前'}">顺延 ${pDays} 天</span>` : ''}
+            </h4>
+            ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}
+            <p style="margin-top:4px;font-size:11px;color:#6b7280;">
+              ${item.time ? '⏰ ' + item.time + ' · ' : ''}
+              ${item.focusMinutes ? '🍅 已专注 ' + item.focusMinutes + ' 分钟 · ' : ''}
+              来源：${sourceLabel(item.source)}
+            </p>
+          </div>
+          <button class="btn btn-secondary focus-this" data-task="${item.taskId}" data-sub="${item.subIndex}" style="font-size:12px;padding:6px 12px;">专注</button>
+        </div>
+      `;}).join('');
+
+      container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          const item = e.target.closest('.day-task-item');
+          const taskId = item.dataset.task;
+          const subIdx = parseInt(item.dataset.sub);
+          toggleSubtask(taskId, subIdx);
+        });
+      });
+
+      container.querySelectorAll('.focus-this').forEach(btn => {
+        btn.addEventListener('click', () => {
+          focusTaskId = btn.dataset.task;
+          const task = tasks.find(t => t.id === focusTaskId);
+          let title = task ? task.title : '专注任务';
+          if (task && task.subtasks && btn.dataset.sub >= 0) {
+            const sub = task.subtasks[parseInt(btn.dataset.sub)];
+            if (sub) title = sub.title;
+          }
+          document.getElementById('timer-task').textContent = `正在专注：${title}`;
+          openFocusModal();
+        });
+      });
+    }
+
+    function renderBoard() {
+      const cols = { todo: document.getElementById('col-todo'), doing: document.getElementById('col-doing'), done: document.getElementById('col-done') };
+      const counts = { todo: 0, doing: 0, done: 0 };
+
+      Object.values(cols).forEach(c => c.innerHTML = '');
+
+      tasks.forEach(task => {
+        if (!task || task.deleted) return;
+        const status = task.status || 'todo';
+        if (counts[status] !== undefined) counts[status]++;
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        card.draggable = true;
+        card.dataset.id = task.id;
+        const pDays = getPostponeDays(task);
+        const dateText = (task.startDate && task.endDate)
+          ? `${getDisplayDate(task.startDate)} - ${getDisplayDate(task.endDate)}`
+          : (task.date ? getDisplayDate(task.date) : '');
+
+        card.innerHTML = `
+          <div class="task-title">
+            ${escapeHtml(task.title)}
+            ${pDays > 0 ? `<span class="postpone-tag">顺延 ${pDays} 天</span>` : ''}
+          </div>
+          <div class="task-meta">
+            ${dateText ? `<span>📅 ${dateText}</span>` : ''}
+            ${task.time ? `<span>⏰ ${task.time}</span>` : ''}
+            ${task.durationDays ? `<span>⏱ ${task.durationDays}天</span>` : ''}
+          </div>
+          ${task.description ? `<div class="task-desc">${escapeHtml(task.description.substring(0, 80))}${task.description.length > 80 ? '...' : ''}</div>` : ''}
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${(task.tags || []).map(t => `<span class="tag tag-primary">${escapeHtml(t)}</span>`).join('')}
+            <span class="tag tag-${task.source === 'image' ? 'success' : 'warning'}">${sourceLabel(task.source)}</span>
+          </div>
+        `;
+
+        card.addEventListener('dragstart', (e) => {
+          card.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', task.id);
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+        if (cols[status]) cols[status].appendChild(card);
+      });
+
+      document.getElementById('count-todo').textContent = counts.todo;
+      document.getElementById('count-doing').textContent = counts.doing;
+      document.getElementById('count-done').textContent = counts.done;
+
+      // Stats
+      document.getElementById('stat-total').textContent = tasks.filter(t => !t.deleted).length;
+      document.getElementById('stat-today').textContent = getTasksForDate(formatDate(new Date())).filter(t => t.status !== 'done').length;
+      document.getElementById('stat-focus').textContent = tasks.reduce((sum, t) => sum + (t.subtasks ? t.subtasks.reduce((s, st) => s + (st.focusMinutes || 0), 0) : (t.focusMinutes || 0)), 0);
+    }
+
+    function toggleSubtask(taskId, subIdx) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      if (subIdx >= 0 && task.subtasks && task.subtasks[subIdx]) {
+        const sub = task.subtasks[subIdx];
+        sub.status = sub.status === 'done' ? 'todo' : 'done';
+        const allDone = task.subtasks.every(s => s.status === 'done');
+        const anyDoing = task.subtasks.some(s => s.status === 'doing');
+        if (allDone) task.status = 'done';
+        else if (anyDoing || sub.status === 'doing') task.status = 'doing';
+        else task.status = 'todo';
+      } else {
+        task.status = task.status === 'done' ? 'todo' : 'done';
+      }
+
+      task.updatedAt = Date.now();
+      saveData(false, [task]);
+      renderDayDetail();
+      renderBoard();
+    }
+
+    // ==================== Drag & Drop ====================
+    document.querySelectorAll('.column').forEach(col => {
+      col.addEventListener('dragover', (e) => e.preventDefault());
+      col.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('text/plain');
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+          task.status = col.dataset.status;
+          saveData();
+          renderBoard();
+        }
+      });
+    });
+
+    // ==================== Input Tabs ====================
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    // ==================== Image OCR ====================
+    const uploadBox = document.getElementById('upload-box');
+    const imageInput = document.getElementById('image-input');
+    const ocrStatus = document.getElementById('ocr-status');
+
+    uploadBox.addEventListener('click', () => imageInput.click());
+    uploadBox.addEventListener('dragover', (e) => { e.preventDefault(); uploadBox.classList.add('dragover'); });
+    uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('dragover'));
+    uploadBox.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadBox.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleImage(e.dataTransfer.files[0]);
+    });
+    imageInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleImage(e.target.files[0]);
+    });
+
+    async function handleImage(file) {
+      ocrStatus.textContent = '正在加载 OCR 模型，请稍候...';
+      ocrStatus.classList.add('visible');
+
+      try {
+        const { data: { text } } = await Tesseract.recognize(file, 'chi_sim+eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              ocrStatus.textContent = `正在识别... ${Math.round(m.progress * 100)}%`;
+            }
+          }
+        });
+
+        ocrStatus.textContent = '识别完成，正在解析任务...';
+        parseOCRText(text);
+        ocrStatus.textContent = `✅ 已识别并添加任务。识别原文：${text.substring(0, 80)}...`;
+      } catch (err) {
+        ocrStatus.textContent = '❌ OCR 识别失败：' + err.message;
+      }
+    }
+
+    function parseOCRText(text) {
+      // Simple parser for the demonstrated format
+      const taskBlocks = text.split(/Task\s*\d+[:：]/i).filter(Boolean);
+
+      if (taskBlocks.length === 0) {
+        // Fallback: create one task with whole text
+        createTask({
+          title: 'OCR 识别任务',
+          description: text,
+          startDate: formatDate(new Date()),
+          durationDays: 1,
+          source: 'image',
+          tags: ['OCR']
+        });
+        return;
+      }
+
+      taskBlocks.forEach((block, idx) => {
+        const lines = block.split(/\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) return;
+
+        const title = lines[0];
+        const desc = lines.slice(1).join(' ');
+        const dayMatch = block.match(/(\d+)\s*天/);
+        const dateMatch = block.match(/(\d{1,2})月\s*(\d{1,2})日/);
+
+        const duration = dayMatch ? parseInt(dayMatch[1]) : 1;
+        const endDate = dateMatch
+          ? `${new Date().getFullYear()}-${String(dateMatch[1]).padStart(2,'0')}-${String(dateMatch[2]).padStart(2,'0')}`
+          : addDays(formatDate(new Date()), duration - 1);
+
+        const startDate = addDays(endDate, -(duration - 1));
+
+        createTask({
+          title: `Task ${idx + 1}: ${title}`,
+          description: desc,
+          startDate,
+          durationDays: duration,
+          source: 'image',
+          tags: ['OCR']
+        });
+      });
+    }
+
+    function createTask({ title, description, startDate, durationDays, source, tags }) {
+      const endDate = addDays(startDate, durationDays - 1);
+      const subtasks = [];
+      for (let i = 0; i < durationDays; i++) {
+        subtasks.push({
+          date: addDays(startDate, i),
+          title: `Day ${i + 1}`,
+          description: i === 0 ? title : '继续推进：' + title,
+          status: 'todo',
+          focusMinutes: 0
+        });
+      }
+
+      tasks.push({
+        id: generateId(),
+        title,
+        description,
+        startDate,
+        endDate,
+        durationDays,
+        source,
+        status: 'todo',
+        tags: tags || [],
+        subtasks
+      });
+
+      saveData();
+      renderAll();
+    }
+
+    // ==================== NLP Query ====================
+    const nlpInput = document.getElementById('nlp-input');
+    const nlpBtn = document.getElementById('nlp-btn');
+    const nlpResult = document.getElementById('nlp-result');
+
+    document.querySelectorAll('.nlp-example').forEach(ex => {
+      ex.addEventListener('click', () => {
+        nlpInput.value = ex.dataset.query;
+        handleNLP();
+      });
+    });
+
+    nlpBtn.addEventListener('click', handleNLP);
+    nlpInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleNLP(); });
+
+    function handleNLP() {
+      const query = nlpInput.value.trim();
+      if (!query) return;
+
+      let targetDate = null;
+      const today = new Date();
+
+      // Relative date parsing
+      if (query.includes('今天')) targetDate = formatDate(today);
+      else if (query.includes('明天')) targetDate = addDays(formatDate(today), 1);
+      else if (query.includes('后天')) targetDate = addDays(formatDate(today), 2);
+      else if (query.includes('昨天')) targetDate = addDays(formatDate(today), -1);
+      else if (query.includes('本周')) {
+        // Show this week summary
+        nlpResult.innerHTML = renderWeekSummary();
+        return;
+      } else {
+        targetDate = parseDate(query);
+      }
+
+      if (!targetDate) {
+        nlpResult.innerHTML = `<div style="padding:12px;background:#fee2e2;color:#991b1b;border-radius:8px;">没能识别日期，请用「后天」「10.16」「10月16日」等格式</div>`;
+        return;
+      }
+
+      selectedDate = targetDate;
+      renderCalendar();
+      renderDayDetail();
+
+      const dayTasks = getTasksForDate(targetDate);
+      if (dayTasks.length === 0) {
+        nlpResult.innerHTML = `<div style="padding:12px;background:#f3f4f6;border-radius:8px;">${getDisplayDate(targetDate)} 没有安排任务</div>`;
+        return;
+      }
+
+      nlpResult.innerHTML = `
+        <div style="padding:16px;background:#e0e7ff;border-radius:8px;">
+          <div style="font-weight:600;color:#4f46e5;margin-bottom:8px;">${getDisplayDate(targetDate)} ${getWeekday(targetDate)} 共 ${dayTasks.length} 项任务</div>
+          <ul style="margin-left:18px;line-height:1.8;">
+            ${dayTasks.map(t => `<li>${t.title}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    function renderWeekSummary() {
+      const today = new Date();
+      let html = '<div style="padding:16px;background:#e0e7ff;border-radius:8px;"><div style="font-weight:600;color:#4f46e5;margin-bottom:8px;">本周任务概览</div>';
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(formatDate(today), i);
+        const items = getTasksForDate(d);
+        html += `<div style="margin:8px 0;padding:8px;background:white;border-radius:6px;">
+          <strong>${getDisplayDate(d)} ${getWeekday(d)}</strong>：${items.length ? items.map(x => x.title).join('、') : '无任务'}
+        </div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // ==================== Manual Add ====================
+    document.getElementById('manual-add').addEventListener('click', () => {
+      const title = document.getElementById('manual-title').value.trim();
+      const desc = document.getElementById('manual-desc').value.trim();
+      const start = document.getElementById('manual-start').value || formatDate(new Date());
+      const days = parseInt(document.getElementById('manual-days').value) || 1;
+
+      if (!title) return alert('请输入任务名称');
+
+      createTask({
+        title,
+        description: desc || title,
+        startDate: start,
+        durationDays: days,
+        source: 'manual',
+        tags: ['手动']
+      });
+
+      document.getElementById('manual-title').value = '';
+      document.getElementById('manual-desc').value = '';
+      document.getElementById('manual-days').value = '1';
+    });
+
+    // ==================== Floating Ball ====================
+    const fab = document.getElementById('fab');
+    const fabMenu = document.getElementById('fab-menu');
+
+    fab.addEventListener('click', () => {
+      fab.classList.toggle('active');
+      fabMenu.classList.toggle('open');
+    });
+
+    document.getElementById('fab-focus').addEventListener('click', () => {
+      document.getElementById('timer-task').textContent = '选择一个任务开始专注';
+      focusTaskId = null;
+      openFocusModal();
+      fab.click();
+    });
+
+    document.getElementById('fab-today').addEventListener('click', () => {
+      selectedDate = formatDate(new Date());
+      renderCalendar();
+      renderDayDetail();
+      window.scrollTo({ top: document.getElementById('day-detail').offsetTop - 20, behavior: 'smooth' });
+      fab.click();
+    });
+
+    document.getElementById('fab-add').addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-tab="manual"]').classList.add('active');
+      document.getElementById('panel-manual').classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      fab.click();
+    });
+
+    // ==================== Focus Timer ====================
+    const focusModal = document.getElementById('focus-modal');
+    const timerDisplay = document.getElementById('timer-display');
+    const progressCircle = document.getElementById('progress-circle');
+    const startBtn = document.getElementById('timer-start');
+    const pauseBtn = document.getElementById('timer-pause');
+    const resetBtn = document.getElementById('timer-reset');
+
+    let timerInterval = null;
+    let totalSeconds = 25 * 60;
+    let remainingSeconds = totalSeconds;
+    let isRunning = false;
+    const circumference = 2 * Math.PI * 90;
+
+    function openFocusModal() {
+      focusModal.classList.add('open');
+      resetTimer();
+    }
+
+    document.getElementById('close-focus').addEventListener('click', () => {
+      focusModal.classList.remove('open');
+      pauseTimer();
+    });
+
+    focusModal.addEventListener('click', (e) => {
+      if (e.target === focusModal) {
+        focusModal.classList.remove('open');
+        pauseTimer();
+      }
+    });
+
+    function updateTimerDisplay() {
+      const m = String(Math.floor(remainingSeconds / 60)).padStart(2, '0');
+      const s = String(remainingSeconds % 60).padStart(2, '0');
+      timerDisplay.textContent = `${m}:${s}`;
+      const offset = circumference - (remainingSeconds / totalSeconds) * circumference;
+      progressCircle.style.strokeDashoffset = offset;
+    }
+
+    function setTimerPet(state) {
+      const spriteEl = document.getElementById('timer-pet-sprite');
+      if (!spriteEl) return;
+      if (state === 'focus') spriteEl.src = 'sprites/realm.gif';
+      else if (state === 'done') spriteEl.src = 'sprites/clap.gif';
+      else if (state === 'idle') spriteEl.src = 'sprites/idle1.gif';
+    }
+
+    function startTimer(skipPush = false) {
+      if (isRunning) return;
+      isRunning = true;
+      startBtn.style.display = 'none';
+      pauseBtn.style.display = 'inline-flex';
+      setTimerPet('focus');
+
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'running',
+          running: true,
+          paused: false,
+          endsAt: Date.now() + remainingSeconds * 1000,
+          remaining: remainingSeconds,
+          totalSeconds: totalSeconds,
+          taskId: focusTaskId
+        });
+      }
+
+      timerInterval = setInterval(() => {
+        remainingSeconds--;
+        updateTimerDisplay();
+
+        if (remainingSeconds <= 0) {
+          clearInterval(timerInterval);
+          isRunning = false;
+          startBtn.style.display = 'inline-flex';
+          pauseBtn.style.display = 'none';
+          setTimerPet('done');
+          if ('vibrate' in navigator) {
+            try { navigator.vibrate([300, 150, 300, 150, 400]); } catch (e) {}
+          }
+          recordFocus();
+          alert('🎉 专注时间结束！休息一下吧 ☕');
+          if (syncClient && syncClient.enabled) {
+            syncClient.pushFocus({ status: 'idle', running: false, paused: false, remaining: 0, totalSeconds });
+          }
+        }
+      }, 1000);
+    }
+
+    function pauseTimer(skipPush = false) {
+      if (!isRunning) return;
+      clearInterval(timerInterval);
+      isRunning = false;
+      startBtn.style.display = 'inline-flex';
+      pauseBtn.style.display = 'none';
+      setTimerPet('idle');
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'paused',
+          running: false,
+          paused: true,
+          remaining: remainingSeconds,
+          totalSeconds: totalSeconds,
+          taskId: focusTaskId
+        });
+      }
+    }
+
+    function resetTimer(skipPush = false) {
+      pauseTimer(true);
+      remainingSeconds = totalSeconds;
+      updateTimerDisplay();
+      setTimerPet('idle');
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'idle',
+          running: false,
+          paused: false,
+          remaining: 0,
+          totalSeconds: totalSeconds
+        });
+      }
+    }
+
+    function recordFocus() {
+      if (!focusTaskId) return;
+      const task = tasks.find(t => t.id === focusTaskId);
+      if (task) {
+        const focused = Math.floor(totalSeconds / 60);
+        if (task.subtasks && Array.isArray(task.subtasks)) {
+          const sub = task.subtasks.find(s => s.status !== 'done') || task.subtasks[0];
+          if (sub) sub.focusMinutes = (sub.focusMinutes || 0) + focused;
+        } else {
+          task.focusMinutes = (task.focusMinutes || 0) + focused;
+        }
+        task.updatedAt = Date.now();
+        saveData(false, [task]);
+        renderDayDetail();
+        renderBoard();
+      }
+    }
+
+    startBtn.addEventListener('click', () => startTimer(false));
+    pauseBtn.addEventListener('click', () => pauseTimer(false));
+    resetBtn.addEventListener('click', () => resetTimer(false));
+
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        totalSeconds = parseInt(btn.dataset.minutes) * 60;
+        resetTimer(false);
+      });
+    });
+
+    document.getElementById('btn-web-postpone').addEventListener('click', () => {
+      const nextDay = addDays(selectedDate, 1);
+      const changed = [];
+      (tasks || []).forEach(t => {
+        if (!t || t.deleted || t.status === 'done') return;
+        if (t.subtasks && Array.isArray(t.subtasks)) {
+          let hasChange = false;
+          t.subtasks.forEach(sub => {
+            if (sub.date === selectedDate && sub.status !== 'done') {
+              if (!sub.originalDate) sub.originalDate = sub.date;
+              sub.postponeCount = (sub.postponeCount || 0) + 1;
+              sub.date = nextDay;
+              hasChange = true;
+            }
+          });
+          if (hasChange) {
+            t.updatedAt = Date.now();
+            changed.push(t);
+          }
+        } else if (t.date === selectedDate) {
+          if (!t.originalDate) t.originalDate = t.date;
+          t.postponeCount = (t.postponeCount || 0) + 1;
+          t.date = nextDay;
+          t.updatedAt = Date.now();
+          changed.push(t);
+        }
+      });
+      if (changed.length > 0) {
+        saveData(false, changed);
+        renderCalendar();
+        renderDayDetail();
+        renderBoard();
+        alert(`已将 ${changed.length} 项未完成任务顺延至明天（${nextDay}）！`);
+      } else {
+        alert('当前日期没有未完成的任务需要顺延哦。');
+      }
+    });
+
+    // ==================== Sync Modal Handlers ====================
+    const syncModal = document.getElementById('sync-modal');
+    document.getElementById('btn-cloud-sync').addEventListener('click', () => {
+      const cfg = getSyncConfig();
+      document.getElementById('web-sync-url').value = cfg.serverUrl || 'https://focus-flow-y68c.onrender.com';
+      document.getElementById('web-sync-key').value = cfg.syncKey || '';
+      document.getElementById('web-btn-disconnect-sync').style.display = cfg.enabled ? 'inline-flex' : 'none';
+      syncModal.classList.add('open');
+    });
+
+    document.getElementById('close-sync').addEventListener('click', () => {
+      syncModal.classList.remove('open');
+    });
+
+    syncModal.addEventListener('click', e => {
+      if (e.target === syncModal) syncModal.classList.remove('open');
+    });
+
+    document.getElementById('web-btn-genkey').addEventListener('click', () => {
+      document.getElementById('web-sync-key').value = 'ff_' + Math.random().toString(36).slice(2, 8);
+    });
+
+    document.getElementById('web-btn-save-sync').addEventListener('click', () => {
+      const url = document.getElementById('web-sync-url').value.trim() || 'https://focus-flow-y68c.onrender.com';
+      const key = document.getElementById('web-sync-key').value.trim();
+      if (!key) {
+        alert('请输入或生成一个 Sync Key 配对密钥！');
+        return;
+      }
+      const newCfg = { enabled: true, serverUrl: url, syncKey: key };
+      saveSyncConfig(newCfg);
+      if (syncClient) {
+        syncClient.updateConfig(newCfg);
+      } else {
+        initWebSync();
+      }
+      syncModal.classList.remove('open');
+    });
+
+    document.getElementById('web-btn-disconnect-sync').addEventListener('click', () => {
+      const cfg = getSyncConfig();
+      cfg.enabled = false;
+      saveSyncConfig(cfg);
+      if (syncClient) syncClient.updateConfig(cfg);
+      updateWebSyncBadge('disconnected');
+      syncModal.classList.remove('open');
+    });
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+
+    // ==================== Init ====================
+    function renderAll() {
+      renderCalendar();
+      renderDayDetail();
+      renderBoard();
+    }
+
+    loadData();
+    renderAll();
+    initWebSync();
+  </script>
+</body>
+</html>

@@ -383,6 +383,16 @@
     .day-task-content { flex: 1; }
     .day-task-content h4 { font-size: 15px; margin-bottom: 4px; }
     .day-task-content p { font-size: 13px; color: var(--text-secondary); }
+    .day-task-item.done h4 { text-decoration: line-through; color: var(--text-secondary); }
+    .postpone-tag {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      background: #fffbeb; color: #d97706; border: 1px solid #fde68a;
+      white-space: nowrap; margin-left: 6px; vertical-align: middle;
+    }
+    .day-task-item.done .postpone-tag {
+      background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb;
+    }
 
     .floating-ball {
       position: fixed;
@@ -677,10 +687,13 @@
     <div class="calendar-strip" id="calendar-strip"></div>
 
     <section class="day-detail" id="day-detail">
-      <h2>
-        <span id="selected-date-label">今日任务</span>
-        <span class="date-tag" id="selected-date-tag">10月13日</span>
-      </h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="margin-bottom:0;">
+          <span id="selected-date-label">今日任务</span>
+          <span class="date-tag" id="selected-date-tag">10月13日</span>
+        </h2>
+        <button id="btn-web-postpone" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;border-radius:20px;">未完顺延 ⏩</button>
+      </div>
       <div class="day-tasks" id="day-tasks"></div>
     </section>
 
@@ -730,6 +743,9 @@
       <div class="modal-header">
         <h3>🍅 专注计时</h3>
         <button class="close-btn" id="close-focus">&times;</button>
+      </div>
+      <div style="text-align:center;margin:6px 0;">
+        <img id="timer-pet-sprite" src="sprites/idle1.gif" style="width:58px;height:58px;object-fit:contain;" alt="Elysia">
       </div>
       <div class="timer-task" id="timer-task">选择一个任务开始专注</div>
       <svg class="progress-ring" viewBox="0 0 200 200">
@@ -1028,14 +1044,54 @@
       }
     }
 
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function sourceLabel(s) {
+      return { manual: '手动', http: 'AI/接口', clipboard: '剪贴板', inbox: '文件', ai: '内置AI', 'gemini-skill': 'AI/Skill', nlp: '自然语言', image: '图片' }[s] || s || '桌面同步';
+    }
+
+    function getPostponeDays(item) {
+      if (!item) return 0;
+      if (item.originalDate && item.date && item.originalDate < item.date) {
+        const d1 = new Date(item.originalDate + 'T00:00:00');
+        const d2 = new Date(item.date + 'T00:00:00');
+        const diff = Math.max(0, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
+        if (diff > 0) return diff;
+      }
+      return item.postponeCount || 0;
+    }
+
     function getTasksForDate(dateStr) {
       const result = [];
-      tasks.forEach(task => {
-        task.subtasks.forEach((sub, idx) => {
-          if (sub.date === dateStr) {
-            result.push({ ...sub, taskTitle: task.title, taskId: task.id, subIndex: idx });
-          }
-        });
+      (tasks || []).forEach(task => {
+        if (!task || task.deleted) return;
+        if (task.subtasks && Array.isArray(task.subtasks)) {
+          task.subtasks.forEach((sub, idx) => {
+            if (sub.date === dateStr) {
+              result.push({
+                ...sub,
+                taskTitle: task.title,
+                taskId: task.id,
+                subIndex: idx,
+                originalDate: sub.originalDate || task.originalDate,
+                postponeCount: sub.postponeCount || task.postponeCount,
+                source: sub.source || task.source
+              });
+            }
+          });
+        } else if (task.date === dateStr) {
+          result.push({
+            ...task,
+            taskTitle: task.title,
+            taskId: task.id,
+            subIndex: -1,
+            originalDate: task.originalDate,
+            postponeCount: task.postponeCount,
+            source: task.source
+          });
+        }
       });
       return result;
     }
@@ -1060,17 +1116,26 @@
         return;
       }
 
-      container.innerHTML = dayTasks.map(item => `
+      container.innerHTML = dayTasks.map(item => {
+        const pDays = getPostponeDays(item);
+        return `
         <div class="day-task-item ${item.status === 'done' ? 'done' : ''}" data-task="${item.taskId}" data-sub="${item.subIndex}">
           <input type="checkbox" ${item.status === 'done' ? 'checked' : ''}>
           <div class="day-task-content">
-            <h4>${item.title}</h4>
-            <p>${item.description}</p>
-            <p style="margin-top:4px;font-size:11px;color:#6b7280;">来自：${item.taskTitle}</p>
+            <h4>
+              ${escapeHtml(item.title)}
+              ${pDays > 0 ? `<span class="postpone-tag" title="原定于 ${item.originalDate || '之前'}">顺延 ${pDays} 天</span>` : ''}
+            </h4>
+            ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}
+            <p style="margin-top:4px;font-size:11px;color:#6b7280;">
+              ${item.time ? '⏰ ' + item.time + ' · ' : ''}
+              ${item.focusMinutes ? '🍅 已专注 ' + item.focusMinutes + ' 分钟 · ' : ''}
+              来源：${sourceLabel(item.source)}
+            </p>
           </div>
           <button class="btn btn-secondary focus-this" data-task="${item.taskId}" data-sub="${item.subIndex}" style="font-size:12px;padding:6px 12px;">专注</button>
         </div>
-      `).join('');
+      `;}).join('');
 
       container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.addEventListener('change', (e) => {
@@ -1085,8 +1150,12 @@
         btn.addEventListener('click', () => {
           focusTaskId = btn.dataset.task;
           const task = tasks.find(t => t.id === focusTaskId);
-          const sub = task.subtasks[parseInt(btn.dataset.sub)];
-          document.getElementById('timer-task').textContent = `正在专注：${sub.title}`;
+          let title = task ? task.title : '专注任务';
+          if (task && task.subtasks && btn.dataset.sub >= 0) {
+            const sub = task.subtasks[parseInt(btn.dataset.sub)];
+            if (sub) title = sub.title;
+          }
+          document.getElementById('timer-task').textContent = `正在专注：${title}`;
           openFocusModal();
         });
       });
@@ -1099,21 +1168,32 @@
       Object.values(cols).forEach(c => c.innerHTML = '');
 
       tasks.forEach(task => {
-        counts[task.status]++;
+        if (!task || task.deleted) return;
+        const status = task.status || 'todo';
+        if (counts[status] !== undefined) counts[status]++;
         const card = document.createElement('div');
         card.className = 'task-card';
         card.draggable = true;
         card.dataset.id = task.id;
+        const pDays = getPostponeDays(task);
+        const dateText = (task.startDate && task.endDate)
+          ? `${getDisplayDate(task.startDate)} - ${getDisplayDate(task.endDate)}`
+          : (task.date ? getDisplayDate(task.date) : '');
+
         card.innerHTML = `
-          <div class="task-title">${task.title}</div>
-          <div class="task-meta">
-            <span>📅 ${getDisplayDate(task.startDate)} - ${getDisplayDate(task.endDate)}</span>
-            <span>⏱ ${task.durationDays}天</span>
+          <div class="task-title">
+            ${escapeHtml(task.title)}
+            ${pDays > 0 ? `<span class="postpone-tag">顺延 ${pDays} 天</span>` : ''}
           </div>
-          <div class="task-desc">${task.description.substring(0, 80)}${task.description.length > 80 ? '...' : ''}</div>
+          <div class="task-meta">
+            ${dateText ? `<span>📅 ${dateText}</span>` : ''}
+            ${task.time ? `<span>⏰ ${task.time}</span>` : ''}
+            ${task.durationDays ? `<span>⏱ ${task.durationDays}天</span>` : ''}
+          </div>
+          ${task.description ? `<div class="task-desc">${escapeHtml(task.description.substring(0, 80))}${task.description.length > 80 ? '...' : ''}</div>` : ''}
           <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${task.tags.map(t => `<span class="tag tag-primary">${t}</span>`).join('')}
-            <span class="tag tag-${task.source === 'image' ? 'success' : 'warning'}">${task.source === 'image' ? '图片' : task.source === 'nlp' ? 'NLP' : '手动'}</span>
+            ${(task.tags || []).map(t => `<span class="tag tag-primary">${escapeHtml(t)}</span>`).join('')}
+            <span class="tag tag-${task.source === 'image' ? 'success' : 'warning'}">${sourceLabel(task.source)}</span>
           </div>
         `;
 
@@ -1123,7 +1203,7 @@
         });
         card.addEventListener('dragend', () => card.classList.remove('dragging'));
 
-        cols[task.status].appendChild(card);
+        if (cols[status]) cols[status].appendChild(card);
       });
 
       document.getElementById('count-todo').textContent = counts.todo;
@@ -1131,25 +1211,28 @@
       document.getElementById('count-done').textContent = counts.done;
 
       // Stats
-      document.getElementById('stat-total').textContent = tasks.length;
+      document.getElementById('stat-total').textContent = tasks.filter(t => !t.deleted).length;
       document.getElementById('stat-today').textContent = getTasksForDate(formatDate(new Date())).filter(t => t.status !== 'done').length;
-      document.getElementById('stat-focus').textContent = tasks.reduce((sum, t) => sum + t.subtasks.reduce((s, st) => s + (st.focusMinutes || 0), 0), 0);
+      document.getElementById('stat-focus').textContent = tasks.reduce((sum, t) => sum + (t.subtasks ? t.subtasks.reduce((s, st) => s + (st.focusMinutes || 0), 0) : (t.focusMinutes || 0)), 0);
     }
 
     function toggleSubtask(taskId, subIdx) {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
-      const sub = task.subtasks[subIdx];
-      sub.status = sub.status === 'done' ? 'todo' : 'done';
+      if (subIdx >= 0 && task.subtasks && task.subtasks[subIdx]) {
+        const sub = task.subtasks[subIdx];
+        sub.status = sub.status === 'done' ? 'todo' : 'done';
+        const allDone = task.subtasks.every(s => s.status === 'done');
+        const anyDoing = task.subtasks.some(s => s.status === 'doing');
+        if (allDone) task.status = 'done';
+        else if (anyDoing || sub.status === 'doing') task.status = 'doing';
+        else task.status = 'todo';
+      } else {
+        task.status = task.status === 'done' ? 'todo' : 'done';
+      }
 
-      // Update parent task status based on subtasks
-      const allDone = task.subtasks.every(s => s.status === 'done');
-      const anyDoing = task.subtasks.some(s => s.status === 'doing');
-      if (allDone) task.status = 'done';
-      else if (anyDoing || sub.status === 'doing') task.status = 'doing';
-      else task.status = 'todo';
-
-      saveData();
+      task.updatedAt = Date.now();
+      saveData(false, [task]);
       renderDayDetail();
       renderBoard();
     }
@@ -1460,11 +1543,20 @@
       progressCircle.style.strokeDashoffset = offset;
     }
 
+    function setTimerPet(state) {
+      const spriteEl = document.getElementById('timer-pet-sprite');
+      if (!spriteEl) return;
+      if (state === 'focus') spriteEl.src = 'sprites/realm.gif';
+      else if (state === 'done') spriteEl.src = 'sprites/clap.gif';
+      else if (state === 'idle') spriteEl.src = 'sprites/idle1.gif';
+    }
+
     function startTimer(skipPush = false) {
       if (isRunning) return;
       isRunning = true;
       startBtn.style.display = 'none';
       pauseBtn.style.display = 'inline-flex';
+      setTimerPet('focus');
 
       if (!skipPush && syncClient && syncClient.enabled) {
         syncClient.pushFocus({
@@ -1487,8 +1579,12 @@
           isRunning = false;
           startBtn.style.display = 'inline-flex';
           pauseBtn.style.display = 'none';
+          setTimerPet('done');
+          if ('vibrate' in navigator) {
+            try { navigator.vibrate([300, 150, 300, 150, 400]); } catch (e) {}
+          }
           recordFocus();
-          alert('专注时间结束！休息一下吧 ☕');
+          alert('🎉 专注时间结束！休息一下吧 ☕');
           if (syncClient && syncClient.enabled) {
             syncClient.pushFocus({ status: 'idle', running: false, paused: false, remaining: 0, totalSeconds });
           }
@@ -1502,6 +1598,7 @@
       isRunning = false;
       startBtn.style.display = 'inline-flex';
       pauseBtn.style.display = 'none';
+      setTimerPet('idle');
       if (!skipPush && syncClient && syncClient.enabled) {
         syncClient.pushFocus({
           status: 'paused',
@@ -1518,6 +1615,7 @@
       pauseTimer(true);
       remainingSeconds = totalSeconds;
       updateTimerDisplay();
+      setTimerPet('idle');
       if (!skipPush && syncClient && syncClient.enabled) {
         syncClient.pushFocus({
           status: 'idle',
@@ -1534,9 +1632,15 @@
       const task = tasks.find(t => t.id === focusTaskId);
       if (task) {
         const focused = Math.floor(totalSeconds / 60);
-        const sub = (task.subtasks || []).find(s => s.status !== 'done') || (task.subtasks && task.subtasks[0]);
-        if (sub) sub.focusMinutes = (sub.focusMinutes || 0) + focused;
-        saveData();
+        if (task.subtasks && Array.isArray(task.subtasks)) {
+          const sub = task.subtasks.find(s => s.status !== 'done') || task.subtasks[0];
+          if (sub) sub.focusMinutes = (sub.focusMinutes || 0) + focused;
+        } else {
+          task.focusMinutes = (task.focusMinutes || 0) + focused;
+        }
+        task.updatedAt = Date.now();
+        saveData(false, [task]);
+        renderDayDetail();
         renderBoard();
       }
     }
@@ -1552,6 +1656,44 @@
         totalSeconds = parseInt(btn.dataset.minutes) * 60;
         resetTimer(false);
       });
+    });
+
+    document.getElementById('btn-web-postpone').addEventListener('click', () => {
+      const nextDay = addDays(selectedDate, 1);
+      const changed = [];
+      (tasks || []).forEach(t => {
+        if (!t || t.deleted || t.status === 'done') return;
+        if (t.subtasks && Array.isArray(t.subtasks)) {
+          let hasChange = false;
+          t.subtasks.forEach(sub => {
+            if (sub.date === selectedDate && sub.status !== 'done') {
+              if (!sub.originalDate) sub.originalDate = sub.date;
+              sub.postponeCount = (sub.postponeCount || 0) + 1;
+              sub.date = nextDay;
+              hasChange = true;
+            }
+          });
+          if (hasChange) {
+            t.updatedAt = Date.now();
+            changed.push(t);
+          }
+        } else if (t.date === selectedDate) {
+          if (!t.originalDate) t.originalDate = t.date;
+          t.postponeCount = (t.postponeCount || 0) + 1;
+          t.date = nextDay;
+          t.updatedAt = Date.now();
+          changed.push(t);
+        }
+      });
+      if (changed.length > 0) {
+        saveData(false, changed);
+        renderCalendar();
+        renderDayDetail();
+        renderBoard();
+        alert(`已将 ${changed.length} 项未完成任务顺延至明天（${nextDay}）！`);
+      } else {
+        alert('当前日期没有未完成的任务需要顺延哦。');
+      }
     });
 
     // ==================== Sync Modal Handlers ====================

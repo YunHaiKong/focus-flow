@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --production
 
 COPY server.js ./
+COPY web/ ./web/
 
 EXPOSE 23120
 

@@ -28,6 +28,45 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// Static web directory for Mobile PWA
+const WEB_DIR = fs.existsSync(path.join(__dirname, 'web'))
+  ? path.join(__dirname, 'web')
+  : (fs.existsSync(path.join(__dirname, '..', 'web')) ? path.join(__dirname, '..', 'web') : null);
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/manifest+json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.css': 'text/css; charset=utf-8'
+};
+
+function serveStatic(req, res, pathname) {
+  if (!WEB_DIR) return false;
+  let cleanPath = decodeURIComponent(pathname.split('?')[0]);
+  let relPath = cleanPath === '/' ? 'index.html' : cleanPath.replace(/^\/+/, '');
+  let filePath = path.normalize(path.join(WEB_DIR, relPath));
+
+  if (!filePath.startsWith(WEB_DIR)) return false;
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = MIME_TYPES[ext] || 'application/octet-stream';
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400'
+    });
+    fs.createReadStream(filePath).pipe(res);
+    return true;
+  }
+  return false;
+}
+
 // In-memory Room State: Map<syncKey, RoomData>
 // RoomData: { tasks: Map<id, Task>, focusState: Object, lastUpdated: number }
 const rooms = new Map();
@@ -178,7 +217,7 @@ const server = http.createServer((req, res) => {
   const pathname = parsedUrl.pathname;
 
   // 1. Health check
-  if (pathname === '/health' || pathname === '/') {
+  if (pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
@@ -187,6 +226,11 @@ const server = http.createServer((req, res) => {
       activeRooms: rooms.size,
       serverTime: Date.now()
     }));
+    return;
+  }
+
+  // 2. Static Web Assets & Mobile PWA
+  if (req.method === 'GET' && serveStatic(req, res, pathname)) {
     return;
   }
 
