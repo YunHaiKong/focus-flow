@@ -3,4 +3,7 @@ release/
 *.log
 .DS_Store
 server/data/
-
+android-release/
+android/.gradle/
+android/app/build/
+android/build-output/
