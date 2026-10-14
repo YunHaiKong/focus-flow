@@ -29,29 +29,63 @@ function extractDate(text) {
   if ((m = text.match(/(\d+)\s*天[后後]/))) {
     return { date: addDays(today, parseInt(m[1], 10)), matched: m[0] };
   }
-  if (text.includes('大后天')) return { date: addDays(today, 3), matched: '大后天' };
-  if (text.includes('后天')) return { date: addDays(today, 2), matched: '后天' };
-  if (text.includes('明天') || text.includes('明晚')) return { date: addDays(today, 1), matched: '明天' };
-  if (text.includes('今天') || text.includes('今晚')) return { date: today, matched: '今天' };
-  if (text.includes('昨天')) return { date: addDays(today, -1), matched: '昨天' };
-  if ((m = text.match(/(本|这|下)?\s*周\s*([一二三四五六日天])/))) {
+  if (text.includes('大大后天') || text.includes('大大後天')) return { date: addDays(today, 4), matched: text.includes('大大后天') ? '大大后天' : '大大後天' };
+  if (text.includes('大后天') || text.includes('大後天')) return { date: addDays(today, 3), matched: text.includes('大后天') ? '大后天' : '大後天' };
+  if (text.includes('后天') || text.includes('後天')) return { date: addDays(today, 2), matched: text.includes('后天') ? '后天' : '後天' };
+  
+  if ((m = text.match(/(明晚|明早|明天|次日)/))) {
+    return { date: addDays(today, 1), matched: m[0], modifier: m[0].includes('晚') ? '晚上' : (m[0].includes('早') ? '早上' : null) };
+  }
+  if ((m = text.match(/(今晚|今早|今天|今日|当日)/))) {
+    return { date: today, matched: m[0], modifier: m[0].includes('晚') ? '晚上' : (m[0].includes('早') ? '早上' : null) };
+  }
+  if ((m = text.match(/(昨晚|昨早|昨天|昨日)/))) {
+    return { date: addDays(today, -1), matched: m[0], modifier: m[0].includes('晚') ? '晚上' : (m[0].includes('早') ? '早上' : null) };
+  }
+
+  if ((m = text.match(/(本|这|下下|下个|下)?\s*(?:周|星期|礼拜)\s*([一二三四五六日天])/))) {
     const target = WEEK_CN[m[2]];
     const cur = base.getDay();
+    const prefix = m[1] || '';
     let diff = (target - cur + 7) % 7;
-    if (diff === 0) diff = 7;
-    if (m[1] === '下' && target > cur) diff += 7;
+    if (prefix === '本' || prefix === '这') {
+      if (diff === 0 && target !== cur) diff = 7;
+    } else if (prefix === '下下') {
+      diff = (diff === 0 ? 7 : diff) + 7;
+    } else if (prefix === '下' || prefix === '下个') {
+      if (target > cur) {
+        diff += 7;
+      } else if (target === cur) {
+        diff = 7;
+      }
+    } else {
+      if (diff === 0) diff = 7;
+    }
     return { date: addDays(today, diff), matched: m[0] };
   }
   return null;
 }
 
-function extractTime(text) {
-  let m = text.match(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*(\d{1,2})\s*[点时:：]\s*(\d{2})?/);
-  if (!m) return null;
+function extractTime(text, defaultModifier) {
+  let m = text.match(/(凌晨|早上|上午|中午|下午|傍晚|晚上|早|晚)?\s*(\d{1,2})\s*(?:点半|[点时:：]\s*(\d{2})?)/);
+  if (!m) {
+    if (defaultModifier) {
+      let m2 = text.match(/(\d{1,2})\s*(?:点半|[点时:：]\s*(\d{2})?)/);
+      if (m2) {
+        m = [m2[0], defaultModifier, m2[1], m2[2]];
+      }
+    }
+    if (!m) return null;
+  }
   let h = parseInt(m[2], 10);
-  const min = m[3] ? parseInt(m[3], 10) : 0;
-  const ap = m[1] || '';
-  if ((ap === '下午' || ap === '傍晚' || ap === '晚上') && h < 12) h += 12;
+  let min = 0;
+  if (m[0].includes('点半')) {
+    min = 30;
+  } else if (m[3]) {
+    min = parseInt(m[3], 10);
+  }
+  const ap = m[1] || defaultModifier || '';
+  if ((ap === '下午' || ap === '傍晚' || ap === '晚上' || ap === '晚') && h < 12) h += 12;
   if (h > 23 || min > 59) return null;
   return { time: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`, matched: m[0] };
 }
@@ -63,10 +97,18 @@ function parseTaskText(raw) {
     let text = seg;
     let date = null;
     let time = null;
+    let modifier = null;
     const d = extractDate(text);
-    if (d) { date = d.date; text = text.replace(d.matched, ' '); }
-    const t = extractTime(text);
-    if (t) { time = t.time; text = text.replace(t.matched, ' '); }
+    if (d) {
+      date = d.date;
+      modifier = d.modifier;
+      text = text.replace(d.matched, ' ');
+    }
+    const t = extractTime(text, modifier);
+    if (t) {
+      time = t.time;
+      text = text.replace(t.matched, ' ');
+    }
     let title = text.replace(/[，,。！!？?\s]+/g, ' ').trim();
     // strip leftover schedule keywords so titles stay clean
     title = title.replace(/(?:^|\s)(?:从|于|自)?(?:今天|明天|后天|当天)(?:起|开始)?(?:$|\s)/g, ' ');

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "focus-flow": {
+      "command": "node",
+      "args": [
+        "c:/Users/23896/Desktop/focus-flow/desktop/mcp-server.js"
+      ]
+    }
+  }
+}
