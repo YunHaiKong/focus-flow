@@ -63,3 +63,14 @@ When the desktop app is running, it hosts an HTTP service at `http://127.0.0.1:2
 ## 📋 Clipboard Sniffing Channel
 
 If an agent does not have command execution permissions (e.g. browser chat interface), the user can copy text starting with `#task ` (e.g. `#task 检查线上日志`), and Focus Flow will detect it in the system clipboard within 2 seconds and add it to today's list.
+
+---
+
+## ☁️ Cloud Sync Server (Port 23120)
+
+Focus Flow includes a dedicated real-time synchronization hub for Desktop, Mobile (PWA), and Web:
+- Start server: `cd server && npm start`
+- REST Sync API: `POST http://localhost:23120/api/sync`
+- WebSocket Realtime: `ws://localhost:23120/ws?key=<syncKey>&deviceId=<id>`
+- Supabase alternative: execute `server/supabase-schema.sql` for serverless cloud sync.
+

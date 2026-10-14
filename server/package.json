@@ -1,0 +1,17 @@
+{
+  "name": "focus-flow-server",
+  "version": "1.0.0",
+  "description": "Cloud Synchronization Server for Focus Flow (Desktop, Mobile, Web)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test-sync.js"
+  },
+  "keywords": ["focus-flow", "sync", "realtime", "pomodoro", "tasks"],
+  "author": "YunHaiKong",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

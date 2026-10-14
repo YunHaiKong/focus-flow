@@ -286,6 +286,23 @@ section.tab.active { display: block; }
     <label class="check"><input type="checkbox" id="cfg-clip"> 自动监听剪贴板（#task 开头）</label>
     <label class="check"><input type="checkbox" id="cfg-sound"> 专注完成播放治愈铃声</label>
     <label class="check"><input type="checkbox" id="cfg-snap"> 屏幕边缘智能贴边半隐藏</label>
+
+    <div style="margin:10px 0;padding:10px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:600;color:#166534;">☁️ 三端云同步</span>
+        <span id="sync-status-badge" style="font-size:10px;padding:2px 6px;border-radius:10px;background:#e5e7eb;color:#374151;">离线</span>
+      </div>
+      <label class="check" style="margin-bottom:6px;"><input type="checkbox" id="cfg-sync-enabled"> 启用跨设备云端实时同步</label>
+      <label style="margin-bottom:6px;">云服务器地址<input type="text" id="cfg-sync-url" placeholder="http://localhost:23120"></label>
+      <label style="margin-bottom:6px;">专属配对密钥 (Sync Key)
+        <div style="display:flex;gap:6px;margin-top:4px;">
+          <input type="text" id="cfg-sync-key" placeholder="如 ff_mykey123" style="margin-top:0;">
+          <button id="btn-sync-genkey" type="button" style="padding:4px 8px;font-size:11px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;white-space:nowrap;">随机</button>
+        </div>
+      </label>
+      <button id="btn-sync-trigger" type="button" style="width:100%;margin-top:4px;padding:6px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">立即从云端拉取刷新</button>
+    </div>
+
     <button id="cfg-save">保存设置</button>
     <button id="open-history" style="display:block;width:100%;padding:8px;background:#fff;color:#4f46e5;border:1px solid #4f46e5;border-radius:8px;font-size:12px;cursor:pointer;margin-bottom:8px">打开完整历史统计与热力图</button>
     <div class="hint">
@@ -648,6 +665,28 @@ function render() {
   renderFocus();
 }
 
+function updateSyncBadge(status) {
+  const badge = $('sync-status-badge');
+  if (!badge) return;
+  if (status === 'connected') {
+    badge.textContent = '🟢 实时已连通';
+    badge.style.background = '#dcfce7';
+    badge.style.color = '#15803d';
+  } else if (status === 'connecting') {
+    badge.textContent = '🟡 连接中...';
+    badge.style.background = '#fef9c3';
+    badge.style.color = '#a16207';
+  } else if (status === 'error') {
+    badge.textContent = '🔴 异常重试中';
+    badge.style.background = '#fee2e2';
+    badge.style.color = '#b91c1c';
+  } else {
+    badge.textContent = '⚪ 离线脱机';
+    badge.style.background = '#f3f4f6';
+    badge.style.color = '#6b7280';
+  }
+}
+
 function renderSettings() {
   const c = state.config || {};
   if (document.activeElement !== $('cfg-hotkey')) $('cfg-hotkey').value = c.hotkey || 'Alt+Shift+F';
@@ -659,6 +698,12 @@ function renderSettings() {
   $('cfg-clip').checked = c.clipboardWatch !== false;
   $('cfg-sound').checked = c.soundEnabled !== false;
   $('cfg-snap').checked = c.edgeSnapping !== false;
+
+  const s = c.sync || {};
+  $('cfg-sync-enabled').checked = !!s.enabled;
+  if (document.activeElement !== $('cfg-sync-url')) $('cfg-sync-url').value = s.serverUrl || 'http://localhost:23120';
+  if (document.activeElement !== $('cfg-sync-key')) $('cfg-sync-key').value = s.syncKey || '';
+  updateSyncBadge(state.syncStatus || 'disconnected');
 }
 
 document.querySelectorAll('.tabs button').forEach(btn => {
@@ -750,11 +795,30 @@ $('cfg-save').addEventListener('click', async () => {
     autoStart: $('cfg-autostart').checked,
     clipboardWatch: $('cfg-clip').checked,
     soundEnabled: $('cfg-sound').checked,
-    edgeSnapping: $('cfg-snap').checked
+    edgeSnapping: $('cfg-snap').checked,
+    sync: {
+      enabled: $('cfg-sync-enabled').checked,
+      serverUrl: $('cfg-sync-url').value.trim() || 'http://localhost:23120',
+      syncKey: $('cfg-sync-key').value.trim()
+    }
   });
   $('cfg-save').textContent = '已保存 ✓';
   setTimeout(() => { $('cfg-save').textContent = '保存设置'; }, 1200);
   loadState();
+});
+
+$('btn-sync-genkey').addEventListener('click', () => {
+  const newKey = 'ff_' + Math.random().toString(36).slice(2, 8);
+  $('cfg-sync-key').value = newKey;
+});
+
+$('btn-sync-trigger').addEventListener('click', async () => {
+  $('btn-sync-trigger').textContent = '同步中...';
+  if (api.triggerSync) await api.triggerSync();
+  setTimeout(() => {
+    $('btn-sync-trigger').textContent = '立即从云端拉取刷新';
+    loadState();
+  }, 800);
 });
 
 $('open-history').addEventListener('click', () => api.openHistory());
@@ -864,6 +928,13 @@ api.onFocusInput(() => {
 
 if (api.onPlayChime) api.onPlayChime(() => playChime());
 window.addEventListener('play-chime', () => playChime());
+
+if (api.onSyncStatus) {
+  api.onSyncStatus(s => {
+    state.syncStatus = s;
+    updateSyncBadge(s);
+  });
+}
 
 loadState();
 </script>

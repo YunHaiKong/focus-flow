@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { fmt, addDays, extractDate, parseTaskText } = require('./src/parser');
+const SyncClient = require('./src/sync-client');
 
 const PORT = 23119;
 
@@ -40,6 +41,103 @@ let focus = {
 let lastClip = '';
 let dragBase = null;
 let serverInstance = null;
+let syncClient = null;
+
+function getFocusPayload() {
+  return {
+    status: focus.running ? 'running' : (focus.paused ? 'paused' : 'idle'),
+    running: focus.running,
+    paused: focus.paused,
+    mode: focus.mode || 'work',
+    pomodoroCount: focus.pomodoroCount || 0,
+    endsAt: focus.endsAt,
+    remaining: focus.remaining,
+    totalSeconds: focus.totalSeconds,
+    minutes: focus.minutes,
+    taskId: focus.taskId,
+    updatedAt: Date.now()
+  };
+}
+
+function mergeIncomingTasks(incoming) {
+  if (!Array.isArray(incoming) || incoming.length === 0) return;
+  const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
+  let modified = false;
+
+  for (const inc of incoming) {
+    if (!inc || !inc.id) continue;
+    const idx = data.tasks.findIndex(x => x.id === inc.id);
+    if (idx >= 0) {
+      const existing = data.tasks[idx];
+      if ((inc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+        if (inc.deleted) {
+          data.tasks.splice(idx, 1);
+        } else {
+          data.tasks[idx] = Object.assign({}, existing, inc);
+        }
+        modified = true;
+      }
+    } else if (!inc.deleted) {
+      data.tasks.push(inc);
+      modified = true;
+    }
+  }
+
+  if (modified) {
+    save(TASKS_FILE, data);
+    refreshRenderer();
+  }
+}
+
+function applyIncomingFocus(inc) {
+  if (!inc) return;
+  const status = inc.status;
+  if (status === 'running') {
+    const remain = Math.max(0, Math.round(((inc.endsAt || 0) - Date.now()) / 1000));
+    if (remain > 0) {
+      focus.running = true;
+      focus.paused = false;
+      focus.endsAt = inc.endsAt;
+      focus.remaining = remain;
+      focus.totalSeconds = inc.totalSeconds || 1500;
+      focus.minutes = Math.round(focus.totalSeconds / 60);
+      focus.taskId = inc.taskId || null;
+      focus.mode = inc.mode || 'work';
+      startFocusTimer();
+      refreshRenderer();
+    }
+  } else if (status === 'paused') {
+    clearInterval(focus.timer);
+    focus.running = false;
+    focus.paused = true;
+    focus.remaining = inc.remaining || 0;
+    refreshRenderer();
+  } else if (status === 'idle') {
+    if (focus.running || focus.paused) {
+      focusStop(false);
+    }
+  }
+}
+
+function initSyncClient() {
+  const cfg = load(CONFIG_FILE, {});
+  const s = cfg.sync || {};
+  syncClient = new SyncClient({
+    serverUrl: s.serverUrl || 'http://localhost:23120',
+    syncKey: s.syncKey || '',
+    enabled: !!s.enabled,
+    deviceId: s.deviceId || ('pc_' + Math.random().toString(36).slice(2, 7)),
+    onStatusChange: status => {
+      if (win && !win.isDestroyed()) win.webContents.send('sync-status', status);
+    },
+    onTasksReceived: tasks => mergeIncomingTasks(tasks),
+    onFocusReceived: fState => applyIncomingFocus(fState)
+  });
+
+  if (s.enabled && s.syncKey) {
+    syncClient.connect();
+  }
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -207,8 +305,9 @@ function refreshRenderer() {
 function addTask(text, source, priority = 'normal') {
   const parsed = parseTaskText(text);
   const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
+  const addedList = [];
   parsed.tasks.forEach(t => {
-    data.tasks.push({
+    const item = {
       id: 't' + Date.now() + Math.random().toString(36).slice(2, 7),
       title: String(t.title || '新任务').slice(0, 120),
       date: t.date,
@@ -217,10 +316,15 @@ function addTask(text, source, priority = 'normal') {
       status: 'todo',
       source: source || 'manual',
       focusMinutes: 0,
-      createdAt: Date.now()
-    });
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deleted: false
+    };
+    data.tasks.push(item);
+    addedList.push(item);
   });
   save(TASKS_FILE, data);
+  if (syncClient) syncClient.pushTasks(addedList);
   notifyTaskAdded(parsed);
   refreshRenderer();
   return { ok: true, added: parsed.tasks.length, tasks: parsed.tasks };
@@ -229,7 +333,12 @@ function addTask(text, source, priority = 'normal') {
 function setStatus(id, status) {
   const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
   const t = data.tasks.find(x => x.id === id);
-  if (t) { t.status = status; save(TASKS_FILE, data); }
+  if (t) {
+    t.status = status;
+    t.updatedAt = Date.now();
+    save(TASKS_FILE, data);
+    if (syncClient) syncClient.pushTasks([t]);
+  }
   refreshRenderer();
   return { ok: true };
 }
@@ -239,7 +348,9 @@ function togglePriority(id) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return { ok: false, error: 'task not found' };
   t.priority = t.priority === 'high' ? 'normal' : 'high';
+  t.updatedAt = Date.now();
   save(TASKS_FILE, data);
+  if (syncClient) syncClient.pushTasks([t]);
   refreshRenderer();
   return { ok: true, priority: t.priority };
 }
@@ -248,18 +359,20 @@ function postponeUndoneTasks() {
   const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
   const today = todayStr();
   const nextDay = addDays(today, 1);
-  let count = 0;
+  const changed = [];
   data.tasks.forEach(t => {
     if (t.date === today && t.status !== 'done') {
       t.date = nextDay;
-      count++;
+      t.updatedAt = Date.now();
+      changed.push(t);
     }
   });
-  if (count > 0) {
+  if (changed.length > 0) {
     save(TASKS_FILE, data);
+    if (syncClient) syncClient.pushTasks(changed);
     refreshRenderer();
   }
-  return { ok: true, postponed: count, nextDate: nextDay };
+  return { ok: true, postponed: changed.length, nextDate: nextDay };
 }
 
 function updateTask(id, fields) {
@@ -271,7 +384,9 @@ function updateTask(id, fields) {
   if (fields.time !== undefined) t.time = fields.time;
   if (fields.priority !== undefined) t.priority = fields.priority;
   if (fields.status !== undefined) t.status = fields.status;
+  t.updatedAt = Date.now();
   save(TASKS_FILE, data);
+  if (syncClient) syncClient.pushTasks([t]);
   refreshRenderer();
   return { ok: true, task: t };
 }
@@ -279,6 +394,12 @@ function updateTask(id, fields) {
 function deleteTask(id) {
   const data = load(TASKS_FILE, { tasks: [], focusHistory: [] });
   const before = data.tasks.length;
+  const target = data.tasks.find(x => x.id === id);
+  if (target) {
+    target.deleted = true;
+    target.updatedAt = Date.now();
+    if (syncClient) syncClient.pushTasks([target]);
+  }
   data.tasks = data.tasks.filter(x => x.id !== id);
   save(TASKS_FILE, data);
   refreshRenderer();
@@ -349,6 +470,7 @@ function focusStart(minutes, taskId) {
     focus.endsAt = Date.now() + focus.remaining * 1000;
     startFocusTimer();
     refreshRenderer();
+    if (syncClient) syncClient.pushFocus(getFocusPayload());
     return { ok: true, running: true, paused: false, remaining: focus.remaining, mode: focus.mode };
   }
   const m = Math.max(1, Math.min(parseInt(minutes, 10) || 25, 180));
@@ -363,6 +485,7 @@ function focusStart(minutes, taskId) {
   focus.startedAt = Date.now();
   startFocusTimer();
   refreshRenderer();
+  if (syncClient) syncClient.pushFocus(getFocusPayload());
   return { ok: true, running: true, paused: false, mode: 'work', minutes: m };
 }
 
@@ -379,6 +502,7 @@ function focusStartBreak(minutes) {
   focus.startedAt = Date.now();
   startFocusTimer();
   refreshRenderer();
+  if (syncClient) syncClient.pushFocus(getFocusPayload());
   return { ok: true, running: true, mode: 'break', minutes: m };
 }
 
@@ -399,6 +523,7 @@ function focusPause() {
     });
   }
   refreshRenderer();
+  if (syncClient) syncClient.pushFocus(getFocusPayload());
   return { ok: true, running: false, paused: true, remaining: focus.remaining, mode: focus.mode };
 }
 
@@ -460,6 +585,7 @@ function focusStop(completed) {
     });
   }
   refreshRenderer();
+  if (syncClient) syncClient.pushFocus(getFocusPayload());
   return { ok: true };
 }
 
@@ -772,6 +898,7 @@ ipcMain.handle('get-state', () => {
     },
     focusToday: (data.focusHistory || []).filter(h => h.date === today).reduce((s, h) => s + h.minutes, 0),
     config: load(CONFIG_FILE, {}),
+    syncStatus: syncClient ? syncClient.status : 'disconnected',
     dockEdge
   };
 });
@@ -787,6 +914,8 @@ ipcMain.handle('focus-start', (e, p) => focusStart(p.minutes, p.taskId));
 ipcMain.handle('focus-pause', () => focusPause());
 ipcMain.handle('focus-stop', () => focusStop(false));
 ipcMain.handle('ask-ai', (e, message) => askAI(message));
+ipcMain.handle('get-sync-status', () => syncClient ? syncClient.status : 'disconnected');
+ipcMain.handle('trigger-sync', () => { if (syncClient) syncClient.syncHttp(); return { ok: true }; });
 
 ipcMain.handle('save-config', (e, c) => {
   const cfg = load(CONFIG_FILE, {});
@@ -801,6 +930,10 @@ ipcMain.handle('save-config', (e, c) => {
     edgeSnapping: c.edgeSnapping !== undefined ? !!c.edgeSnapping : (cfg.edgeSnapping !== false),
     themeMode: c.themeMode || cfg.themeMode || 'pet'
   });
+  if (c.sync) {
+    cfg.sync = Object.assign(cfg.sync || {}, c.sync);
+    if (syncClient) syncClient.updateConfig(cfg.sync);
+  }
   save(CONFIG_FILE, cfg);
   applyAutoStart();
   registerGlobalShortcut();
@@ -850,6 +983,7 @@ app.whenReady().then(() => {
   startServer();
   startWatchers();
   applyAutoStart();
+  initSyncClient();
 });
 
 process.on('uncaughtException', (err) => {

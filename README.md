@@ -46,6 +46,14 @@
 - **Elysia 治愈陪伴**：内置完整 Elysia · Herrscher of Human 像素表情包皮肤（含 12 种表情状态与配套萌系指针），专注与闲置时展现生动反馈。
 - **自由换肤与扩展**：极简设计，只需替换 `desktop/src/sprites/` 目录中的 GIF 序列帧即可定制专属于你的桌面桌宠。
 
+### 5. ☁️ 三端毫秒级云同步 (Desktop + Mobile + Web)
+- **实时全双工联动**：桌面物理悬浮球、移动端（PWA / 小程序）与在线看板通过 WebSocket 实现毫秒级实时双向同步。
+- **离线优先架构 (Offline-First)**：断网时本地无缝读写，恢复连接后基于毫秒时间戳（LWW）增量合并冲突，软删除保障数据完备。
+- **番茄钟跨端对齐**：基于目标时刻（`endsAt`）时间戳同步，即使网络瞬断，各端本地时钟依然精准对齐倒计时。
+- **双引擎部署方案**：
+  - **开箱即用 Node 服务**：内置 `server/` 极简云中枢，单命令本地/Docker/Railway 部署。
+  - **完全免服务器 (Serverless)**：提供完整 `server/supabase-schema.sql`，一键享受免费 Supabase 托管。
+
 ---
 
 ## 🤖 全平台 AI Agent 接入体系
@@ -210,8 +218,16 @@ focus-flow/
 │   ├── tools/                    # 桌面快捷方式生成与图标构建流水线
 │   ├── main.js                   # Electron 主进程 (窗口置顶/穿透/单实例/HTTP API)
 │   └── package.json
-├── web/                          # 零依赖单文件轻量在线版 (GitHub Pages)
-│   └── index.html
+├── server/                       # ☁️ 云端同步中枢服务 (Node.js + WebSocket)
+│   ├── server.js                 # 实时广播与增量同步引擎 (端口 23120)
+│   ├── supabase-schema.sql       # Supabase 免服务器一键部署 SQL 脚本
+│   ├── Dockerfile                # Docker 镜像构建脚本
+│   └── package.json
+├── web/                          # 📱 Web 在线版 & PWA 移动端应用
+│   ├── index.html                # 响应式看板与专注时钟
+│   ├── sync-client.js            # 通用双向云同步引擎
+│   ├── manifest.json             # PWA 移动端桌面安装配置
+│   └── sw.js                     # 离线缓存 Service Worker
 ├── AGENTS.md                     # 全局 AI Agent 开发与操作指导规范
 ├── CLAUDE.md                     # Claude Code 专属速查指南
 ├── focus-flow-mcp.json           # MCP (Model Context Protocol) 配置文件

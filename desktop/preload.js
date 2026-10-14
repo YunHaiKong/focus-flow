@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('ff', {
   openHistory: () => ipcRenderer.send('open-history'),
   togglePriority: id => ipcRenderer.invoke('toggle-priority', id),
   postponeUndone: () => ipcRenderer.invoke('postpone-undone'),
+  getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
+  triggerSync: () => ipcRenderer.invoke('trigger-sync'),
 
   expand: () => ipcRenderer.send('expand'),
   shrink: () => ipcRenderer.send('shrink'),
@@ -30,5 +32,6 @@ contextBridge.exposeInMainWorld('ff', {
   onRefresh: cb => ipcRenderer.on('refresh-state', () => cb()),
   onTick: cb => ipcRenderer.on('focus-tick', (_, s) => cb(s)),
   onFocusInput: cb => ipcRenderer.on('focus-input', () => cb()),
-  onPlayChime: cb => ipcRenderer.on('play-chime', () => cb())
+  onPlayChime: cb => ipcRenderer.on('play-chime', () => cb()),
+  onSyncStatus: cb => ipcRenderer.on('sync-status', (_, s) => cb(s))
 });

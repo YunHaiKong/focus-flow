@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Focus Flow - AI 任务看板</title>
+  <title>Focus Flow - AI 任务看板与番茄钟</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="icon.png">
+  <script src="sync-client.js"></script>
   <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
   <style>
     :root {
@@ -603,18 +609,23 @@
         <h1>Focus <span>Flow</span></h1>
         <p class="subtitle">上传图片或输入自然语言，自动生成任务看板与专注计划</p>
       </div>
-      <div class="stats">
-        <div class="stat-card">
-          <div class="number" id="stat-total">0</div>
-          <div class="label">总任务</div>
-        </div>
-        <div class="stat-card">
-          <div class="number" id="stat-today">0</div>
-          <div class="label">今日待办</div>
-        </div>
-        <div class="stat-card">
-          <div class="number" id="stat-focus">0</div>
-          <div class="label">专注分钟</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button id="btn-cloud-sync" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow);transition:all 0.2s;">
+          <span>☁️</span> <span id="web-sync-text">云同步: 离线 ⚪</span>
+        </button>
+        <div class="stats">
+          <div class="stat-card">
+            <div class="number" id="stat-total">0</div>
+            <div class="label">总任务</div>
+          </div>
+          <div class="stat-card">
+            <div class="number" id="stat-today">0</div>
+            <div class="label">今日待办</div>
+          </div>
+          <div class="stat-card">
+            <div class="number" id="stat-focus">0</div>
+            <div class="label">专注分钟</div>
+          </div>
         </div>
       </div>
     </header>
@@ -739,6 +750,33 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="sync-modal">
+    <div class="modal" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>☁️ Focus Flow 三端云同步</h3>
+        <button class="close-btn" id="close-sync">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+        输入与桌面悬浮球相同的 <strong>Sync Key 配对码</strong>，即可秒级实时双向同步待办与番茄钟！
+      </p>
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">云同步中枢地址</label>
+        <input type="text" id="web-sync-url" value="http://localhost:23120" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
+      </div>
+      <div style="margin-bottom: 18px;">
+        <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; color: var(--text);">设备配对密钥 (Sync Key)</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="web-sync-key" placeholder="例如 ff_8921a" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none;">
+          <button id="web-btn-genkey" class="btn btn-secondary" style="padding: 8px 12px; font-size: 12px; white-space: nowrap;">随机生成</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button id="web-btn-save-sync" class="btn btn-success" style="flex: 1; padding: 10px;">保存并连接同步</button>
+        <button id="web-btn-disconnect-sync" class="btn btn-secondary" style="padding: 10px;">断开</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ==================== Data & State ====================
     const STORAGE_KEY = 'focus-flow-data';
@@ -827,7 +865,115 @@
       return 'task-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     }
 
-    // ==================== Storage ====================
+    // ==================== Storage & Cloud Sync ====================
+    let syncClient = null;
+    const SYNC_CONFIG_KEY = 'focus-flow-sync-cfg';
+
+    function getSyncConfig() {
+      try {
+        const raw = localStorage.getItem(SYNC_CONFIG_KEY);
+        return raw ? JSON.parse(raw) : { enabled: false, serverUrl: 'http://localhost:23120', syncKey: '' };
+      } catch (e) {
+        return { enabled: false, serverUrl: 'http://localhost:23120', syncKey: '' };
+      }
+    }
+
+    function saveSyncConfig(cfg) {
+      localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg));
+    }
+
+    function updateWebSyncBadge(status) {
+      const el = document.getElementById('web-sync-text');
+      const btn = document.getElementById('btn-cloud-sync');
+      if (!el || !btn) return;
+      if (status === 'connected') {
+        el.textContent = '云同步: 实时连通 🟢';
+        btn.style.borderColor = '#16a34a';
+        btn.style.color = '#15803d';
+      } else if (status === 'connecting') {
+        el.textContent = '云同步: 连接中 🟡';
+        btn.style.borderColor = '#ca8a04';
+        btn.style.color = '#a16207';
+      } else if (status === 'error') {
+        el.textContent = '云同步: 异常重试 🔴';
+        btn.style.borderColor = '#dc2626';
+        btn.style.color = '#b91c1c';
+      } else {
+        el.textContent = '云同步: 离线 ⚪';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    }
+
+    function initWebSync() {
+      const cfg = getSyncConfig();
+      if (typeof FocusFlowSyncClient === 'undefined') {
+        console.warn('SyncClient not loaded');
+        return;
+      }
+      syncClient = new FocusFlowSyncClient({
+        serverUrl: cfg.serverUrl || 'http://localhost:23120',
+        syncKey: cfg.syncKey || '',
+        enabled: !!cfg.enabled,
+        deviceId: 'web_' + Math.random().toString(36).slice(2, 8),
+        onStatusChange: status => updateWebSyncBadge(status),
+        onTasksReceived: incoming => mergeIncomingFromSync(incoming),
+        onFocusReceived: fState => applyIncomingFocusWeb(fState)
+      });
+
+      if (cfg.enabled && cfg.syncKey) {
+        syncClient.connect();
+      } else {
+        updateWebSyncBadge('disconnected');
+      }
+    }
+
+    function mergeIncomingFromSync(incoming) {
+      if (!Array.isArray(incoming) || incoming.length === 0) return;
+      let modified = false;
+
+      for (const inc of incoming) {
+        if (!inc || !inc.id) continue;
+        const idx = tasks.findIndex(t => t.id === inc.id);
+        if (idx >= 0) {
+          const existing = tasks[idx];
+          if ((inc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+            if (inc.deleted) {
+              tasks.splice(idx, 1);
+            } else {
+              tasks[idx] = Object.assign({}, existing, inc);
+            }
+            modified = true;
+          }
+        } else if (!inc.deleted) {
+          tasks.push(inc);
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        renderAll();
+      }
+    }
+
+    function applyIncomingFocusWeb(inc) {
+      if (!inc) return;
+      if (inc.status === 'running') {
+        const remain = Math.max(0, Math.round(((inc.endsAt || 0) - Date.now()) / 1000));
+        if (remain > 0) {
+          totalSeconds = inc.totalSeconds || 1500;
+          remainingSeconds = remain;
+          updateTimerDisplay();
+          if (!isRunning) startTimer(true);
+        }
+      } else if (inc.status === 'paused') {
+        pauseTimer(true);
+      } else if (inc.status === 'idle') {
+        resetTimer(true);
+      }
+    }
+
     function loadData() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -837,11 +983,15 @@
         } catch (e) {}
       }
       tasks = JSON.parse(JSON.stringify(demoTasks));
-      saveData();
+      saveData(true);
     }
 
-    function saveData() {
+    function saveData(skipPush = false, mutatedTasks = null) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      if (!skipPush && syncClient && syncClient.enabled) {
+        const toPush = mutatedTasks || tasks.map(t => Object.assign({}, t, { updatedAt: Date.now() }));
+        syncClient.pushTasks(toPush);
+      }
     }
 
     // ==================== Rendering ====================
@@ -1310,11 +1460,23 @@
       progressCircle.style.strokeDashoffset = offset;
     }
 
-    function startTimer() {
+    function startTimer(skipPush = false) {
       if (isRunning) return;
       isRunning = true;
       startBtn.style.display = 'none';
       pauseBtn.style.display = 'inline-flex';
+
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'running',
+          running: true,
+          paused: false,
+          endsAt: Date.now() + remainingSeconds * 1000,
+          remaining: remainingSeconds,
+          totalSeconds: totalSeconds,
+          taskId: focusTaskId
+        });
+      }
 
       timerInterval = setInterval(() => {
         remainingSeconds--;
@@ -1327,22 +1489,44 @@
           pauseBtn.style.display = 'none';
           recordFocus();
           alert('专注时间结束！休息一下吧 ☕');
+          if (syncClient && syncClient.enabled) {
+            syncClient.pushFocus({ status: 'idle', running: false, paused: false, remaining: 0, totalSeconds });
+          }
         }
       }, 1000);
     }
 
-    function pauseTimer() {
+    function pauseTimer(skipPush = false) {
       if (!isRunning) return;
       clearInterval(timerInterval);
       isRunning = false;
       startBtn.style.display = 'inline-flex';
       pauseBtn.style.display = 'none';
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'paused',
+          running: false,
+          paused: true,
+          remaining: remainingSeconds,
+          totalSeconds: totalSeconds,
+          taskId: focusTaskId
+        });
+      }
     }
 
-    function resetTimer() {
-      pauseTimer();
+    function resetTimer(skipPush = false) {
+      pauseTimer(true);
       remainingSeconds = totalSeconds;
       updateTimerDisplay();
+      if (!skipPush && syncClient && syncClient.enabled) {
+        syncClient.pushFocus({
+          status: 'idle',
+          running: false,
+          paused: false,
+          remaining: 0,
+          totalSeconds: totalSeconds
+        });
+      }
     }
 
     function recordFocus() {
@@ -1350,26 +1534,80 @@
       const task = tasks.find(t => t.id === focusTaskId);
       if (task) {
         const focused = Math.floor(totalSeconds / 60);
-        // Add to first incomplete subtask
-        const sub = task.subtasks.find(s => s.status !== 'done') || task.subtasks[0];
-        if (sub) sub.focusMinutes += focused;
+        const sub = (task.subtasks || []).find(s => s.status !== 'done') || (task.subtasks && task.subtasks[0]);
+        if (sub) sub.focusMinutes = (sub.focusMinutes || 0) + focused;
         saveData();
         renderBoard();
       }
     }
 
-    startBtn.addEventListener('click', startTimer);
-    pauseBtn.addEventListener('click', pauseTimer);
-    resetBtn.addEventListener('click', resetTimer);
+    startBtn.addEventListener('click', () => startTimer(false));
+    pauseBtn.addEventListener('click', () => pauseTimer(false));
+    resetBtn.addEventListener('click', () => resetTimer(false));
 
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         totalSeconds = parseInt(btn.dataset.minutes) * 60;
-        resetTimer();
+        resetTimer(false);
       });
     });
+
+    // ==================== Sync Modal Handlers ====================
+    const syncModal = document.getElementById('sync-modal');
+    document.getElementById('btn-cloud-sync').addEventListener('click', () => {
+      const cfg = getSyncConfig();
+      document.getElementById('web-sync-url').value = cfg.serverUrl || 'http://localhost:23120';
+      document.getElementById('web-sync-key').value = cfg.syncKey || '';
+      document.getElementById('web-btn-disconnect-sync').style.display = cfg.enabled ? 'inline-flex' : 'none';
+      syncModal.classList.add('open');
+    });
+
+    document.getElementById('close-sync').addEventListener('click', () => {
+      syncModal.classList.remove('open');
+    });
+
+    syncModal.addEventListener('click', e => {
+      if (e.target === syncModal) syncModal.classList.remove('open');
+    });
+
+    document.getElementById('web-btn-genkey').addEventListener('click', () => {
+      document.getElementById('web-sync-key').value = 'ff_' + Math.random().toString(36).slice(2, 8);
+    });
+
+    document.getElementById('web-btn-save-sync').addEventListener('click', () => {
+      const url = document.getElementById('web-sync-url').value.trim() || 'http://localhost:23120';
+      const key = document.getElementById('web-sync-key').value.trim();
+      if (!key) {
+        alert('请输入或生成一个 Sync Key 配对密钥！');
+        return;
+      }
+      const newCfg = { enabled: true, serverUrl: url, syncKey: key };
+      saveSyncConfig(newCfg);
+      if (syncClient) {
+        syncClient.updateConfig(newCfg);
+      } else {
+        initWebSync();
+      }
+      syncModal.classList.remove('open');
+    });
+
+    document.getElementById('web-btn-disconnect-sync').addEventListener('click', () => {
+      const cfg = getSyncConfig();
+      cfg.enabled = false;
+      saveSyncConfig(cfg);
+      if (syncClient) syncClient.updateConfig(cfg);
+      updateWebSyncBadge('disconnected');
+      syncModal.classList.remove('open');
+    });
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
 
     // ==================== Init ====================
     function renderAll() {
@@ -1380,6 +1618,7 @@
 
     loadData();
     renderAll();
+    initWebSync();
   </script>
 </body>
 </html>
