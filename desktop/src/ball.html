@@ -9,21 +9,18 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 
 #ball {
   position: absolute; right: 0; bottom: 0; width: 80px; height: 80px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 0 0 1.5px rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  color: #fff; display: flex; align-items: center; justify-content: center;
+  background: transparent; color: #fff; display: flex; align-items: center; justify-content: center;
   cursor: grab; user-select: none;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s;
   -webkit-app-region: no-drag;
 }
-#ball:hover {
-  transform: scale(1.06);
-  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.35), 0 3px 8px rgba(0, 0, 0, 0.15), inset 0 0 0 1.5px #fff;
-}
-#ball:active { cursor: grabbing; transform: scale(0.97); }
+#ball:hover { transform: scale(1.08); }
+#ball:active { cursor: grabbing; transform: scale(0.96); }
 
-#sprite { width: 70%; height: 70%; object-fit: contain; pointer-events: none; z-index: 2; }
+#sprite {
+  width: 85%; height: 85%; object-fit: contain; pointer-events: none; z-index: 2;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+}
 
 /* SVG Progress Ring */
 #progress-ring {
@@ -113,8 +110,8 @@ input, select, textarea, .todo-title, .edit-title-input {
 }
 .tabs button.active { color: #4f46e5; background: #fff; font-weight: 600; border-bottom-color: #4f46e5; }
 .tabs .collapse-btn {
-  flex: 0 0 56px !important; height: 100%; border: none !important; background: transparent;
-  color: #6b7280; font-size: 11px; font-weight: 600; cursor: pointer;
+  flex: 0 0 36px !important; height: 100%; border: none !important; background: transparent;
+  color: #9ca3af; font-size: 15px; font-weight: 500; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   border-bottom: 2px solid transparent !important;
   transition: color 0.15s, background 0.15s;
@@ -241,7 +238,7 @@ section.tab.active { display: block; }
     <button data-tab="focus">专注</button>
     <button data-tab="ai">AI</button>
     <button data-tab="settings">设置</button>
-    <button id="btn-collapse" class="collapse-btn" title="收起为桌面悬浮球 (Esc)">✕ 收起</button>
+    <button id="btn-collapse" class="collapse-btn" title="收起 (Esc)">✕</button>
   </div>
 
   <section class="tab active" id="tab-todo">
